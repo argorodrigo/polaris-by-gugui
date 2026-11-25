@@ -621,7 +621,7 @@
   document.addEventListener('DOMContentLoaded', function () {
     $app = document.getElementById('app');
     S = Store.load();
-    if (!S) { S = C.emptyState(); var P = window.POLARIS_PRESET || {}, m = (location.hash || '').match(/^#name-([A-Za-z\u00C0-\u024F' -]{1,30})$/); if (P.name) S.profile.name = P.name; else if (m) { S.profile.name = decodeURIComponent(m[1]); location.hash = 'home'; } }
+    if (!S) { S = C.emptyState(); var P = window.POLARIS_PRESET || {}, m = (location.hash || '').match(/^#name-([A-Za-z\u00C0-\u024F' -]{1,30})$/); if (P.name) S.profile.name = P.name; else if (m) { S.profile.name = decodeURIComponent(m[1]); location.hash = 'home'; } if (S.profile.name) Store.save(S); }
     if (!Store.ok) toast('This browser blocks storage. Your work will not be kept. Export often.', 6000);
     Store.persist();
     document.body.addEventListener('click', onClick);
