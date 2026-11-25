@@ -121,7 +121,7 @@ pre.code{white-space:pre-wrap;background:rgba(5,3,20,.6);border:1px solid var(--
 .hero .planet::after{content:"";position:absolute;inset:0;border-radius:50%;background:
   radial-gradient(circle at 70% 58%,rgba(20,10,70,.35) 0 6%,transparent 7%),radial-gradient(circle at 38% 72%,rgba(20,10,70,.28) 0 4%,transparent 5%),
   radial-gradient(circle at 56% 34%,rgba(20,10,70,.22) 0 3%,transparent 4%);mix-blend-mode:multiply}
-.hero .planet.art{background:center/contain no-repeat var(--art);box-shadow:none;border-radius:0;width:58%;aspect-ratio:1253/1068;filter:drop-shadow(0 0 40px rgba(138,116,255,.35))}
+.hero .planet.art{background:center/cover no-repeat var(--art);border-radius:50%;width:44%;aspect-ratio:1;box-shadow:0 0 70px rgba(138,116,255,.45),0 0 160px rgba(138,116,255,.18)}
 .hero .planet.art::after{display:none}
 .hero .station{position:absolute;z-index:3;transform:translate(-50%,-7px);display:flex;flex-direction:column;align-items:center;gap:3px;text-decoration:none;color:var(--ink);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:2px 6px;border-radius:10px}
 .hero .station i{width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff,#b9a8ff 50%,#5a3fd8);box-shadow:0 0 12px rgba(185,168,255,.9);transition:transform .2s}
@@ -138,7 +138,7 @@ pre.code{white-space:pre-wrap;background:rgba(5,3,20,.6);border:1px solid var(--
 @keyframes bOpen{0%,93.9%{opacity:1}94%,97.9%{opacity:0}98%{opacity:1}}
 @keyframes bHalf{0%,93.9%{opacity:0}94%,94.9%{opacity:1}95%,96.9%{opacity:0}97%,97.9%{opacity:1}98%{opacity:0}}
 @keyframes bClosed{0%,94.9%{opacity:0}95%,96.9%{opacity:1}97%{opacity:0}}
-.hero .resident.desk{position:absolute;right:calc(50% + 250px);bottom:6px;width:74px;z-index:4;display:none}
+.hero .resident.desk{position:absolute;right:calc(50% + 305px);bottom:6px;width:74px;z-index:4;display:none}
 .intro .resident.mob{float:left;width:46px;margin:-6px 14px 0 0}
 @media(min-width:760px){.hero .resident.desk{display:block}.intro .resident.mob{display:none}}
 .lockup .word .i{position:relative;display:inline-block}
@@ -148,6 +148,8 @@ pre.code{white-space:pre-wrap;background:rgba(5,3,20,.6);border:1px solid var(--
   .hero .planet{animation:breathe 9s ease-in-out infinite}
 }
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes dashflow{to{stroke-dashoffset:-24}}
+@media(prefers-reduced-motion:no-preference){.orb .dashes{animation:dashflow 6s linear infinite}}
 @keyframes breathe{50%{box-shadow:inset -22px -26px 60px rgba(10,4,40,.75),inset 10px 12px 30px rgba(255,255,255,.22),0 0 100px rgba(138,116,255,.55),0 0 200px rgba(138,116,255,.22)}}
 /* modal + toast */
 .scrim{position:fixed;inset:0;background:rgba(3,1,12,.65);backdrop-filter:blur(6px);z-index:40;display:flex;align-items:flex-end;justify-content:center}

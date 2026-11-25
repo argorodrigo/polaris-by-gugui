@@ -104,15 +104,15 @@
     var st = [['topics', 'Topics', c.topics, 180], ['inbox', 'Inbox', c.inbox, 312], ['waiting', 'Waiting', c.waiting, 0], ['vault', 'Vault', c.vault, 52], ['log', 'Log', c.log, 128], ['guide', 'Guide', '', 228]];
     var pArt = S.settings.planetArt || window.POLARIS_ART.planet, rArt = S.settings.residentArt || window.POLARIS_ART.resident;
     var art = pArt ? ' art" style="--art:url(' + esc(pArt) + ')' : '';
-    var RX = 44, RY = 15, ROT = (pArt ? -14 : -18) * Math.PI / 180;
+    var RX = 44, RY = 15, ROT = -16 * Math.PI / 180;
     function onRing(deg) { var a = deg * Math.PI / 180, x = RX * Math.cos(a), y = RY * Math.sin(a); return [50 + x * Math.cos(ROT) - y * Math.sin(ROT), 50 + x * Math.sin(ROT) + y * Math.cos(ROT)]; }
     var ringPath = function (r1, r2, front) { // half ellipse: front = lower half (in front of planet)
       var pts = [], i; for (i = 0; i <= 48; i++) { var a = (front ? 0 : 180) + i * 180 / 48, rad = a * Math.PI / 180, x = r1 * Math.cos(rad), y = r2 * Math.sin(rad); pts.push((50 + x * Math.cos(ROT) - y * Math.sin(ROT)).toFixed(2) + ',' + (50 + x * Math.sin(ROT) + y * Math.cos(ROT)).toFixed(2)); }
       return 'M' + pts.join(' L');
     };
     var ring = function (front) { return '<svg class="ring" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="bzr' + (front ? 'f' : 'b') + '" x1="0" x2="1"><stop offset="0" stop-color="#6e5232"/><stop offset=".5" stop-color="#e2c08c"/><stop offset="1" stop-color="#6e5232"/></linearGradient></defs>' +
-      '<path d="' + ringPath(RX, RY, front) + '" fill="none" stroke="rgba(185,168,255,.5)" stroke-width=".32" stroke-dasharray="1.1 1.3"/>' +
-      (pArt ? '' : '<path d="' + ringPath(35, 11.5, front) + '" fill="none" stroke="url(#bzr' + (front ? 'f' : 'b') + ')" stroke-width=".9" stroke-linecap="round" opacity="' + (front ? '.95' : '.55') + '"/>') + '</svg>'; };
+      '<path class="dashes' + (front ? ' f' : '') + '" d="' + ringPath(RX, RY, front) + '" fill="none" stroke="rgba(185,168,255,' + (front ? '.75' : '.45') + ')" stroke-width="' + (front ? '.42' : '.32') + '" stroke-linecap="round" stroke-dasharray="1.1 1.3"/>' +
+      ('<path d="' + ringPath(35, 11.5, front) + '" fill="none" stroke="url(#bzr' + (front ? 'f' : 'b') + ')" stroke-width=".9" stroke-linecap="round" opacity="' + (front ? '.95' : '.55') + '"/>') + '</svg>'; };
     var A = window.POLARIS_ART, blink = !S.settings.residentArt && A.residentHalf && A.residentClosed;
     function resEl(cls) { if (!rArt) return ''; return '<div class="resident ' + cls + (blink ? ' blinks' : '') + '" role="img" aria-label="polaris resident"><i style="--res:url(' + esc(rArt) + ')"></i>' + (blink ? '<i class="h" style="--res:url(' + esc(A.residentHalf) + ')"></i><i class="c" style="--res:url(' + esc(A.residentClosed) + ')"></i>' : '') + '</div>'; }
     var res = resEl('mob');
