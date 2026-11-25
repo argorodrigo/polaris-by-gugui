@@ -121,7 +121,7 @@ pre.code{white-space:pre-wrap;background:rgba(5,3,20,.6);border:1px solid var(--
 .hero .planet::after{content:"";position:absolute;inset:0;border-radius:50%;background:
   radial-gradient(circle at 70% 58%,rgba(20,10,70,.35) 0 6%,transparent 7%),radial-gradient(circle at 38% 72%,rgba(20,10,70,.28) 0 4%,transparent 5%),
   radial-gradient(circle at 56% 34%,rgba(20,10,70,.22) 0 3%,transparent 4%);mix-blend-mode:multiply}
-.hero .planet.art{background:center/cover no-repeat var(--art);border-radius:50%;width:44%;aspect-ratio:1;box-shadow:0 0 70px rgba(138,116,255,.45),0 0 160px rgba(138,116,255,.18)}
+.hero .planet.art{background:center/cover no-repeat var(--art);border-radius:50%;width:44%;aspect-ratio:1;box-shadow:0 0 60px rgba(138,116,255,.38),0 0 150px rgba(138,116,255,.14);animation:none!important}
 .hero .planet.art::after{display:none}
 .hero .station{position:absolute;z-index:3;transform:translate(-50%,-7px);display:flex;flex-direction:column;align-items:center;gap:3px;text-decoration:none;color:var(--ink);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:2px 6px;border-radius:10px}
 .hero .station i{width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff,#b9a8ff 50%,#5a3fd8);box-shadow:0 0 12px rgba(185,168,255,.9);transition:transform .2s}
