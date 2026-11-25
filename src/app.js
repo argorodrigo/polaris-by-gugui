@@ -113,7 +113,7 @@
       return 'M' + pts.join(' L');
     };
     var ring = function (front) { return '<svg class="ring" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="bzr' + (front ? 'f' : 'b') + '" x1="0" x2="1"><stop offset="0" stop-color="#6e5232"/><stop offset=".5" stop-color="#e2c08c"/><stop offset="1" stop-color="#6e5232"/></linearGradient></defs>' +
-      '<path class="dashes' + (front ? ' f' : '') + '" d="' + ringPath(RX, RY, front) + '" fill="none" stroke="rgba(185,168,255,' + (front ? '.75' : '.45') + ')" stroke-width="' + (front ? '.42' : '.32') + '" stroke-linecap="round" stroke-dasharray="1.1 1.3"/>' +
+      '<path class="dashes' + (front ? ' f' : '') + '" d="' + ringPath(RX, RY, front) + '" fill="none" stroke="' + ((window.POLARIS_ART || {}).ring ? (front ? window.POLARIS_ART.ring[0] : window.POLARIS_ART.ring[1]) : 'rgba(185,168,255,' + (front ? '.75' : '.45') + ')') + '" stroke-width="' + (front ? '.42' : '.32') + '" stroke-linecap="round" stroke-dasharray="1.1 1.3"/>' +
       (pArt ? '' : '<path d="' + ringPath(35, 11.5, front) + '" fill="none" stroke="url(#bzr' + (front ? 'f' : 'b') + ')" stroke-width=".9" stroke-linecap="round" opacity="' + (front ? '.95' : '.55') + '"/>') + '</svg>'; };
     var A = window.POLARIS_ART, blink = !S.settings.residentArt && A.residentHalf && A.residentClosed;
     function resEl(cls) { if (!rArt) return ''; return '<div class="resident ' + cls + (blink ? ' blinks' : '') + '" role="img" aria-label="polaris resident"><i style="--res:url(' + esc(rArt) + ')"></i>' + (blink ? '<i class="h" style="--res:url(' + esc(A.residentHalf) + ')"></i><i class="c" style="--res:url(' + esc(A.residentClosed) + ')"></i>' : '') + '</div>'; }
