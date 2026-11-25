@@ -2,8 +2,10 @@
 var PolarisCore = (function () {
   'use strict';
   var SCHEMA = 1;
-  var KINDS = ['fact', 'decision', 'idea', 'question', 'waiting', 'asset', 'source', 'correction', 'conflict'];
+  var KINDS = ['fact', 'decision', 'idea', 'question', 'waiting', 'asset', 'source', 'correction', 'conflict', 'done', 'next'];
   var KIND_ALIASES = {
+    completed: 'done', finished: 'done', 'step done': 'done', 'done step': 'done',
+    'next step': 'next', 'next steps': 'next', todo: 'next', 'to do': 'next', step: 'next', left: 'next',
     facts: 'fact', 'start here': 'fact', status: 'fact', update: 'fact', note: 'fact',
     decisions: 'decision', ruling: 'decision', rule: 'decision', decided: 'decision',
     ideas: 'idea', questions: 'question', 'open question': 'question',
@@ -135,7 +137,7 @@ var PolarisCore = (function () {
   // ---------- model ----------
   function emptyTopic(name) {
     return { id: uid(), name: name, slug: slug(name), status: 'not started', created: now(), updated: now(),
-      start: [], decisions: [], ideas: [], conflicts: [], questions: [], sources: [] };
+      start: [], decisions: [], ideas: [], conflicts: [], questions: [], sources: [], progress: [] };
   }
   function emptyState() {
     return { schema: SCHEMA, app: 'polaris by Gugui', profile: { name: '', created: now() },
@@ -160,7 +162,7 @@ var PolarisCore = (function () {
     Object.keys(base).forEach(function (k) { if (s[k] == null) s[k] = base[k]; });
     Object.keys(base.settings).forEach(function (k) { if (s.settings[k] == null) s.settings[k] = base.settings[k]; });
     Object.keys(base.meta).forEach(function (k) { if (s.meta[k] == null) s.meta[k] = base.meta[k]; });
-    s.topics.forEach(function (t) { ['start', 'decisions', 'ideas', 'conflicts', 'questions', 'sources'].forEach(function (c) { if (!Array.isArray(t[c])) t[c] = []; }); });
+    s.topics.forEach(function (t) { ['start', 'decisions', 'ideas', 'conflicts', 'questions', 'sources', 'progress'].forEach(function (c) { if (!Array.isArray(t[c])) t[c] = []; }); });
     s.schema = SCHEMA;
     return s;
   }
@@ -174,7 +176,7 @@ var PolarisCore = (function () {
 
   // ---------- merge (sync + import). Nothing is dropped: the losing side of a clash goes to the inbox as held. ----------
   var TOP = ['inbox', 'waiting', 'vault', 'log', 'reviews'];
-  var SUB = ['start', 'decisions', 'ideas', 'conflicts', 'questions', 'sources'];
+  var SUB = ['start', 'decisions', 'ideas', 'conflicts', 'questions', 'sources', 'progress'];
   function same(a, b) { var x = Object.assign({}, a), y = Object.assign({}, b); delete x.updated; delete y.updated; return JSON.stringify(x) === JSON.stringify(y); }
   function mergeList(mine, theirs, since, clashes, label) {
     var byId = {}, out = [];
@@ -219,6 +221,12 @@ var PolarisCore = (function () {
     L.push('# ' + t.name + ': the record', '', 'status: ' + t.status + (t.locked ? ' · locked' : '') + ' · updated ' + (t.updated || '').slice(0, 10), '');
     L.push('## Start here', '');
     t.start.forEach(function (x) { L.push('- ' + (x.superseded ? '~~' + md(x.text) + '~~ (superseded)' : md(x.text)) + ' · said ' + (x.said || '?') + (x.base ? ' · ' + link(x.base) : '')); });
+    var pr = (t.progress || []).filter(function (x) { return !x.archived; });
+    if (pr.length) {
+      L.push('', '## Progress', '');
+      pr.filter(function (x) { return x.status === 'done'; }).forEach(function (x) { L.push('- [x] ' + md(x.text) + ' · done ' + (x.doneOn || x.said || '')); });
+      pr.filter(function (x) { return x.status !== 'done'; }).forEach(function (x) { L.push('- [ ] ' + md(x.text) + ' · said ' + (x.said || '')); });
+    }
     L.push('', '## Decisions', '', '| decision | words | who | said | source |', '|---|---|---|---|---|');
     t.decisions.forEach(function (x) { L.push('| ' + md(x.text) + (x.superseded ? ' (superseded)' : '') + ' | ' + md(x.words) + ' | ' + (x.who || 'me') + ' | ' + (x.said || '') + ' | ' + link(x.base) + ' |'); });
     [['Ideas', 'ideas'], ['Open questions', 'questions'], ['Conflicts', 'conflicts'], ['Sources', 'sources']].forEach(function (p) {

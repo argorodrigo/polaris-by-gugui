@@ -264,6 +264,9 @@ body.focus{padding-bottom:env(safe-area-inset-bottom)!important} body.focus #nav
 .projects-chip svg{width:22px;height:22px;fill:none;stroke:#1f1f1f;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .homeline{margin:14px 0 6px;padding:10px 12px;border-radius:12px;background:var(--glass2);border:1px solid var(--line2);font-size:14px;color:var(--ink)}
 .card.whatsnew{border-color:var(--line2);background:linear-gradient(180deg,rgba(185,168,255,.18),rgba(185,168,255,.06))}
+.card.sync{border-color:var(--line2)}
+.codebox{margin-top:12px}
+.codebox textarea,#pair-in{width:100%;min-height:64px;font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
 </style>
 </head>
 <body>
@@ -576,8 +579,8 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     persist: function () { try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {} }
   };
   var autoT = 0;
-  function canAuto() { return S && S.settings.dataMode === 'github' && S.settings.gh && S.settings.gh.owner && S.settings.gh.repo && Store.token && Store.token(); }
-  function save() { Store.save(S); if (canAuto() && !syncing) { clearTimeout(autoT); autoT = setTimeout(function () { sync(true); }, 2500); } }
+  function canAuto() { return S && ((S.settings.dataMode === 'github' && S.settings.gh && S.settings.gh.owner && S.settings.gh.repo && Store.token && Store.token()) || (S.settings.dataMode === 'pair' && pairStore())); }
+  function save() { S.meta.dirty = true; Store.save(S); if (canAuto() && !syncing) { clearTimeout(autoT); autoT = setTimeout(function () { sync(true); }, 2500); } }
 
   // ---------- helpers ----------
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -889,6 +892,23 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
       '<li>Claude goes topic by topic. Copy each reply, come back, tap <b>Save from Claude</b>. Type <b>next</b> in Claude for the next topic. Stop whenever you like; type next later to pick up.</li></ol>' +
       '<div class="row"><button class="btn" data-act="copy-harvest">Copy harvest prompt</button>' + (dismiss ? '<button class="btn ghost sm" data-act="harvest-hide">Hide this</button>' : '') + '</div></div>';
   }
+  function syncCard() {
+    var on = S.settings.dataMode === 'pair' && pairStore(), P = S.settings.pair || {};
+    var h = '<div class="card sync" id="sync"><h2>Sync my devices</h2>';
+    if (on) {
+      h += '<p class="small"><span class="tag ok">On</span> Your phone and computer stay in step on their own. ' + (P.at ? 'Last synced ' + fmtDay(P.at) + '.' : '') + '</p>' +
+        '<div class="row"><button class="btn primary" data-act="pair-now">Sync now</button><button class="btn" data-act="pair-show">' + (ui.pairShow ? 'Hide my code' : 'Show my code') + '</button><button class="btn ghost sm" data-act="pair-off">Turn off on this device</button></div>';
+      if (ui.pairShow) h += '<div class="codebox"><p class="small dim">Your code. Send it to your other device, then on that device: Sync my devices, I have a code, paste, Join. <b>Save it in Notes or Passwords too</b>: it is also your recovery code for a new phone. Keep it private, like a password.</p><textarea readonly id="pair-code" aria-label="Your sync code">' + esc(pairStore()) + '</textarea><div class="row"><button class="btn primary" data-act="pair-share">Share code</button><button class="btn" data-act="pair-copy">Copy code</button></div></div>';
+    } else if (ui.pairJoin) {
+      h += '<p class="small dim">Paste the code from your other device. Everything here stays and is merged in, nothing is replaced.</p><textarea id="pair-in" placeholder="polaris1-..." aria-label="Paste your sync code"></textarea><div class="row"><button class="btn primary" data-act="pair-join">Join</button><button class="btn ghost" data-act="pair-cancel">Cancel</button></div>';
+    } else {
+      h += '<p class="small dim">Keep your phone and computer in lockstep. No accounts. Everything is encrypted on your device before it leaves, so nobody else can read it.</p>' +
+        '<ol class="small steps-list"><li><b>On one device</b> (start with the one that has the most in it): tap <b>Start</b>, then <b>Share code</b> to send the code to your other device.</li><li><b>On the other device</b>: open polaris from its icon, tap <b>I have a code</b>, paste, <b>Join</b>.</li></ol>' +
+        '<div class="row"><button class="btn primary" data-act="pair-start">Start</button><button class="btn" data-act="pair-join-open">I have a code</button></div>' +
+        (S.settings.dataMode === 'github' ? '<p class="small faint">You use GitHub sync now. Starting this one switches this device over; your GitHub copy stays as it is.</p>' : '');
+    }
+    return h + '</div>';
+  }
   function jumpGeneral() { return (window.POLARIS_PRESET || {}).jumpstart === '*'; }
   function jumpTopic() { var j = (window.POLARIS_PRESET || {}).jumpstart || ''; return j === '*' ? '' : j; }
   function generalPrompt() {
@@ -1064,6 +1084,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
       '<div class="row"><div style="flex:1;min-width:140px"><label for="gh-branch">Branch</label><input type="text" id="gh-branch" value="' + esc(gh.branch) + '"></div><div style="flex:1;min-width:140px"><label for="gh-path">File</label><input type="text" id="gh-path" value="' + esc(gh.path) + '"></div></div>' +
       '<label for="gh-token">Token ' + (tok ? '(saved on this device)' : '') + '</label><input type="password" id="gh-token" placeholder="' + (tok ? '••••••••  leave blank to keep' : 'github_pat_…') + '" autocomplete="off">' +
       '<div class="row" style="margin-top:12px"><button class="btn primary" data-act="gh-save-sync">Save and sync now</button>' + (tok ? '<button class="btn danger" data-act="gh-forget">Forget token</button>' : '') + '</div></div>';
+    h += syncCard();
     h += '<div class="card"><h2>Switch devices</h2><p class="small dim">Your phone is your polaris; your computer is where Claude works. To bring everything over to another device: tap <b>Copy my polaris</b> here, then on the other device tap <b>Paste from my other device</b>. On an iPhone and Mac with the same Apple ID, what you copy on one pastes on the other. Nothing is overwritten: both sides are merged. Want it to happen by itself? Turn on <a href="#guide">GitHub sync</a> (Guide, Keep your phone and computer in sync).</p><div class="row"><button class="btn primary" data-act="move-copy">Copy my polaris</button><button class="btn" data-act="move-paste">Paste from my other device</button></div></div>';
     h += '<div class="card"><h2>Backup and export</h2><div class="row"><button class="btn primary" data-act="export-json">Export backup (.json)</button><button class="btn" data-act="export-md">Export Markdown (.zip)</button><label class="btn" style="margin:0;color:var(--ink)">Import backup<input type="file" id="imp" accept=".json,application/json" hidden></label></div><p class="small dim">Import merges into what you have. Nothing here is overwritten without asking.</p></div>';
     h += '<div class="card"><h2>Teach your chats</h2><div class="row"><button class="btn" data-act="copy-front" data-v="claude">Copy start-here for Claude</button><button class="btn" data-act="copy-front" data-v="chatgpt">Copy for ChatGPT</button><button class="btn" data-act="copy-handoff">Copy handoff prompt</button><button class="btn" data-act="copy-harvest">Copy harvest prompt</button><button class="btn" data-act="copy-catchup">Copy weekly catch-up</button></div><details class="ch" style="margin-top:10px"><summary>Preview</summary><pre class="code">' + esc(frontDoor('claude')) + '</pre></details></div>';
@@ -1191,6 +1212,117 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
   }
 
   // ---------- GitHub sync ----------
+  // ---------- device sync (encrypted pairing) ----------
+  // One 32-byte secret, shown as a code. HKDF derives the vault id, the AES-GCM key and the access token.
+  // The server only stores ciphertext and the token's hash.
+  var PAIR_KEY = 'polaris.pair', enc = new TextEncoder(), dec = new TextDecoder();
+  function b64u(buf) { var s = '', a = new Uint8Array(buf); for (var i = 0; i < a.length; i++) s += String.fromCharCode(a[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  function unb64u(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; var b = atob(s), a = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); return a; }
+  function hex(buf) { return Array.prototype.map.call(new Uint8Array(buf), function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); }
+  function pairStore(v) { try { if (v === undefined) return localStorage.getItem(PAIR_KEY) || ''; if (v) localStorage.setItem(PAIR_KEY, v); else localStorage.removeItem(PAIR_KEY); } catch (e) { return ''; } }
+  function cryptoOk() { return !!(window.crypto && crypto.subtle && window.isSecureContext); }
+  function makeCode(secret) {
+    return crypto.subtle.digest('SHA-256', secret).then(function (h) { return 'polaris1-' + b64u(secret) + '-' + hex(h).slice(0, 4); });
+  }
+  function readCode(code) {
+    var m = String(code || '').replace(/\s+/g, '').match(/polaris1-([A-Za-z0-9_-]{43})-([a-f0-9]{4})/);
+    if (!m) return Promise.reject(new Error('That does not look like a polaris code. Copy the whole code, starting with polaris1-'));
+    var secret = unb64u(m[1]);
+    return crypto.subtle.digest('SHA-256', secret).then(function (h) { if (hex(h).slice(0, 4) !== m[2]) throw new Error('That code is cut off or mistyped. Copy it again, all of it.'); return secret; });
+  }
+  function derive(secret) {
+    return crypto.subtle.importKey('raw', secret, 'HKDF', false, ['deriveBits', 'deriveKey']).then(function (base) {
+      var p = function (info) { return { name: 'HKDF', hash: 'SHA-256', salt: enc.encode('polaris-sync-v1'), info: enc.encode(info) }; };
+      return Promise.all([
+        crypto.subtle.deriveBits(p('id'), base, 128),
+        crypto.subtle.deriveBits(p('token'), base, 256),
+        crypto.subtle.deriveKey(p('key'), base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
+      ]).then(function (r) { return { id: hex(r[0]), token: b64u(r[1]), key: r[2] }; });
+    });
+  }
+  function seal(v, rev, obj) {
+    var iv = crypto.getRandomValues(new Uint8Array(12));
+    return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv, additionalData: enc.encode('pv1:' + v.id + ':' + rev) }, v.key, enc.encode(JSON.stringify(obj)))
+      .then(function (ct) { return { iv: b64u(iv), ct: b64u(ct) }; });
+  }
+  function unseal(v, rev, box) {
+    return crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64u(box.iv), additionalData: enc.encode('pv1:' + v.id + ':' + rev) }, v.key, unb64u(box.ct))
+      .then(function (pt) { return JSON.parse(dec.decode(pt)); }, function () { throw new Error('Could not unlock the synced copy. Check the code.'); });
+  }
+  function api(v, method, qs, body) {
+    return fetch('/api/vault?id=' + v.id + (qs || ''), { method: method, cache: 'no-store', headers: Object.assign({ Authorization: 'Bearer ' + v.token }, body ? { 'Content-Type': 'application/json' } : {}), body: body ? JSON.stringify(body) : undefined })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { j.status = r.status; return j; }); });
+  }
+  var vaultP = null;
+  function vault() { var c = pairStore(); if (!c) return Promise.resolve(null); if (!vaultP) vaultP = readCode(c).then(derive); return vaultP; }
+  function snapshot() { try { localStorage.setItem('polaris.snapshot', JSON.stringify({ at: C.now(), state: S })); } catch (e) {} }
+  // pull, merge, push; on a stale write, go round again
+  function pairSync(quiet, tries) {
+    tries = tries || 0;
+    if (syncing && !tries) return Promise.resolve();
+    syncing = true;
+    var done = function () { syncing = false; };
+    return vault().then(function (v) {
+      if (!v) { done(); return; }
+      var P = S.settings.pair || (S.settings.pair = {});
+      return api(v, 'GET', '&since=' + (P.rev || '')).then(function (g) {
+        if (g.status === 404) {
+          if (P.synced) return seal(v, 1, S).then(function (box) { return api(v, 'POST', '', box); }).then(function (r) { if (r.status === 201) { P.rev = 1; P.at = C.now(); S.meta.dirty = false; Store.save(S); } });
+          throw new Error('No synced copy yet. Open polaris on your other device first, so it can finish turning sync on.');
+        }
+        if (g.status === 401) throw new Error('That code does not match. Copy it again from your other device.');
+        if (g.status !== 200) throw new Error('Sync is not reachable right now. Your changes are saved here and will sync later.');
+        var step = g.unchanged ? Promise.resolve(false) : unseal(v, g.rev, g).then(function (theirs) {
+          if (C.validate(theirs).length) throw new Error('The synced copy is not a polaris file.');
+          var m = C.merge(S, theirs, P.synced ? (P.at || '') : ''); S = m.state; S.settings.pair = P; return m.clashes;
+        });
+        return step.then(function (clashes) {
+          var pulled = !g.unchanged, remoteRev = g.rev;
+          var mustPush = S.meta.dirty || pulled;
+          var finish = function (rev) { P.rev = rev; P.at = C.now(); P.synced = true; S.meta.dirty = false; S.meta.lastSync = P.at; Store.save(S); render(); if (clashes) toast('Synced. ' + clashes + ' clash' + (clashes > 1 ? 'es' : '') + ' held in your Inbox.', 4000); else if (!quiet) toast('Synced'); };
+          if (!mustPush) { P.rev = remoteRev; P.at = C.now(); return; }
+          return seal(v, remoteRev + 1, S).then(function (box) { box.expectedRev = remoteRev; return api(v, 'PUT', '', box); }).then(function (r) {
+            if (r.status === 200) return finish(r.rev);
+            if (r.status === 409 && tries < 3) { syncing = false; return pairSync(quiet, tries + 1); }
+            throw new Error('Could not sync just now. Your changes are saved here and will sync later.');
+          });
+        });
+      });
+    }).catch(function (e) { if (!quiet) toast(e.message, 5000); throw e; }).then(done, function (e) { done(); if (!quiet) return; });
+  }
+  function pairStart() {
+    if (!cryptoOk()) return toast('This browser cannot do encrypted sync. Open polaris from its icon or in Safari or Chrome.', 5000);
+    var secret = crypto.getRandomValues(new Uint8Array(32));
+    return makeCode(secret).then(function (code) {
+      return derive(secret).then(function (v) {
+        return seal(v, 1, S).then(function (box) { return api(v, 'POST', '', box); }).then(function (r) {
+          if (r.status !== 201) throw new Error(r.status === 503 ? 'Sync is not reachable right now. Try again in a minute.' : 'Could not turn on sync. Try again.');
+          pairStore(code); vaultP = Promise.resolve(v);
+          S.settings.dataMode = 'pair'; S.settings.pair = { rev: 1, at: C.now(), synced: true }; S.meta.dirty = false; Store.save(S);
+          ui.pairShow = true; render(); toast('Sync is on. Now share your code to your other device.', 4000);
+        });
+      });
+    }).catch(function (e) { toast(e.message, 5000); });
+  }
+  function pairJoin(code) {
+    if (!cryptoOk()) return toast('This browser cannot do encrypted sync. Open polaris from its icon or in Safari or Chrome.', 5000);
+    return readCode(code).then(function (secret) {
+      return derive(secret).then(function (v) {
+        return api(v, 'GET', '').then(function (g) {
+          if (g.status === 404) throw new Error('No synced copy for this code yet. On your other device, tap Start first.');
+          if (g.status === 401) throw new Error('That code does not match. Copy it again from your other device.');
+          if (g.status !== 200) throw new Error('Sync is not reachable right now. Try again in a minute.');
+          return unseal(v, g.rev, g).then(function () {
+            snapshot();
+            pairStore(String(code).replace(/\s+/g, '').match(/polaris1-[A-Za-z0-9_-]{43}-[a-f0-9]{4}/)[0]); vaultP = Promise.resolve(v);
+            S.settings.dataMode = 'pair'; S.settings.pair = { rev: 0, at: '', synced: false }; S.meta.dirty = true;
+            return pairSync(false);
+          });
+        });
+      });
+    }).then(function () { ui.pairJoin = false; render(); }).catch(function (e) { toast(e.message, 6000); });
+  }
+  function pairOff() { pairStore(null); vaultP = null; S.settings.dataMode = 'device'; S.settings.pair = null; Store.save(S); render(); toast('Sync is off on this device. Everything stays here.'); }
   function gh(path, opts) {
     var tok = Store.token(); if (!tok) return Promise.reject(new Error('No token saved on this device.'));
     opts = opts || {}; opts.headers = Object.assign({ Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }, opts.headers || {});
@@ -1202,6 +1334,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
   }
   var syncing = false;
   function sync(quiet) {
+    if (S.settings.dataMode === 'pair') { pairSync(quiet).catch(function () {}); return; }
     if (syncing) return; var g = S.settings.gh;
     if (!g.owner || !g.repo) { if (!quiet) toast('Add owner and repo first'); return; }
     if (quiet && !navigator.onLine) return;
@@ -1263,6 +1396,15 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
       else toast('Paste is blocked in this browser. Use Export backup and Import backup instead.', 5000);
     },
     'seen-update': function () { S.settings.seenUpdate = 2; save(); render(); },
+    'pair-start': function () { if (S.settings.dataMode === 'github' && Store.token()) { sync(true); } pairStart(); },
+    'pair-join-open': function () { ui.pairJoin = true; render(); var t = document.getElementById('pair-in'); if (t) t.focus(); },
+    'pair-cancel': function () { ui.pairJoin = false; render(); },
+    'pair-join': function () { pairJoin(document.getElementById('pair-in').value); },
+    'pair-now': function () { pairSync(false).catch(function () {}); },
+    'pair-show': function () { ui.pairShow = !ui.pairShow; render(); },
+    'pair-copy': function () { copy(pairStore()); },
+    'pair-share': function () { var c = pairStore(); if (navigator.share) navigator.share({ title: 'polaris sync code', text: c }).catch(function () {}); else copy(c); },
+    'pair-off': function () { confirmBox('Turn off sync on this device?', 'Everything stays on this device. Your other devices keep syncing with each other.', 'Turn off', pairOff); },
     'harvest-hide': function () { S.settings.harvestHidden = true; save(); render(); },
     'copy-catchup': function () { copy(catchupPrompt()); },
     'copy-front': function (v) { copy(frontDoor(v)); },

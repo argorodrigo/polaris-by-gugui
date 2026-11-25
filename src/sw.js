@@ -6,7 +6,7 @@ self.addEventListener('activate', function (e) { e.waitUntil(caches.keys().then(
 self.addEventListener('message', function (e) { if (e.data === 'skip') self.skipWaiting(); });
 self.addEventListener('fetch', function (e) {
   var u = new URL(e.request.url);
-  if (e.request.method !== 'GET' || u.origin !== location.origin) return; // never touch GitHub API calls
+  if (e.request.method !== 'GET' || u.origin !== location.origin || u.pathname.indexOf('/api/') === 0) return; // never touch API calls (GitHub, sync)
   // network first: always the newest build when online; the saved copy only when offline
   e.respondWith(fetch(e.request).then(function (r) {
     if (r && r.ok) { var cp = r.clone(); caches.open(CACHE).then(function (c) { c.put(e.request, cp); }); }
