@@ -267,6 +267,9 @@ body.focus{padding-bottom:env(safe-area-inset-bottom)!important} body.focus #nav
 .card.sync{border-color:var(--line2)}
 .codebox{margin-top:12px}
 .codebox textarea,#pair-in{width:100%;min-height:64px;font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
+
+/* iOS zooms into any field under 16px and stays zoomed; keep fields at 16px on touch screens */
+@media (pointer:coarse){input,select,textarea,.codebox textarea,#pair-in{font-size:16px!important}}
 </style>
 </head>
 <body>
