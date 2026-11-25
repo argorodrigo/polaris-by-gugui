@@ -348,7 +348,7 @@
     } else if (ui.pairJoin) {
       h += '<p class="small dim">Paste the code from your other device. Everything here stays and is merged in, nothing is replaced.</p><textarea id="pair-in" placeholder="polaris1-..." aria-label="Paste your sync code"></textarea><div class="row"><button class="btn primary" data-act="pair-join">Join</button><button class="btn ghost" data-act="pair-cancel">Cancel</button></div>';
     } else {
-      h += '<p class="small dim">Keep your phone and computer in lockstep. No accounts. Everything is encrypted on your device before it leaves, so nobody else can read it.</p>' +
+      h += (intro ? '' : '<p class="small dim">Keep your phone and computer in lockstep. No accounts. Everything is encrypted on your device before it leaves, so nobody else can read it.</p>') +
         '<ol class="small steps-list"><li><b>On one device</b> (start with the one that has the most in it): tap <b>Start</b>, then <b>Share code</b> to send the code to your other device.</li><li><b>On the other device</b>: open polaris from its icon, tap <b>I have a code</b>, paste, <b>Join</b>.</li></ol>' +
         '<div class="row"><button class="btn primary" data-act="pair-start">Start</button><button class="btn" data-act="pair-join-open">I have a code</button></div>' +
         (S.settings.dataMode === 'github' ? '<p class="small faint">You use GitHub sync now. Starting this one switches this device over; your GitHub copy stays as it is.</p>' : '');
@@ -450,7 +450,7 @@
           (tps.length ? '<ul class="steps-list">' + tps.map(function (t) { return '<li><a href="#topic/' + esc(t.id) + '" data-act="setup-finish">' + esc(t.name) + '</a></li>'; }).join('') + '</ul>' : '') +
           '<h3>From now on, it saves itself</h3><p class="small dim">You never have to ask. Whenever something is decided or finished, Claude ends its reply with a POLARIS box on its own. Copy that reply, open polaris, tap <b>Save from Claude</b>. That\'s it.</p>' +
           '<p class="small faint">Quick check: start a new Claude chat and decide something small. If the reply ends with a POLARIS box, you\'re set. If not, tap <button class="linkish" data-act="copy-front" data-v="claude">Copy start-here</button> and paste it in Claude, Settings, Profile, the personal preferences box.</p>' +
-          '</div>' + syncCard('<h2>Your phone and computer, as one</h2><p class="small dim">polaris works the same on your iPhone and your computer. Link them once, right here, and everything you save on one shows up on the other on its own, wherever you open it. Start on the device you\'re on now, then open polaris on the other one and paste the code.</p>') + harvestCard(false) + '<div class="card"><div class="row"><a class="btn primary" href="#home" data-act="setup-finish">Go home</a></div></div>';
+          '</div>' + syncCard('<h2>Your phone and computer, as one</h2><p class="small dim">polaris works the same on your iPhone and your computer. Link them once, right here, and everything you save on one shows up on the other on its own, wherever you open it. No accounts, and it\'s encrypted before it leaves your device.</p>') + harvestCard(false) + '<div class="card"><div class="row"><a class="btn primary" href="#home" data-act="setup-finish">Go home</a></div></div>';
         return h + '</div>';
       }
       var t = topicByName(J), all = t ? live(t.progress || []) : [], dn = all.filter(function (x) { return x.status === 'done'; }), nx = all.filter(function (x) { return x.status !== 'done'; });
