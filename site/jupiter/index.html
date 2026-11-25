@@ -887,7 +887,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
   function jumpGeneral() { return (window.POLARIS_PRESET || {}).jumpstart === '*'; }
   function jumpTopic() { var j = (window.POLARIS_PRESET || {}).jumpstart || ''; return j === '*' ? '' : j; }
   function generalPrompt() {
-    return 'polaris jumpstart. Do these in order and tell me as you finish each one. Use everything you have in this session: search of my past chats, my Projects, memory, connected folders, scheduled tasks and any connectors. Do the work yourself instead of telling me how. Ask me only for what only I can do.\n\n' +
+    return 'polaris jumpstart. You are setting up polaris for me, start to finish. Guide me the whole way: do every step you can yourself, and when a step is mine, tell me exactly what to click or tap, one step at a time, then wait for me. Use everything you have in this session (Cowork): search of my past chats, my Projects, memory, connected folders, scheduled tasks and any connectors. Ask me only for what only I can do. Tell me as you finish each part.\n\n' +
       '## 1. Find what I have been working on\n' +
       'Search my chats from the last 30 days (and this Project, if we are in one) with several keywords, read the ones that matter, and pick the 4 to 6 topics that matter most in my life and work right now. Tell me the list.\n\n' +
       '## 2. Save every chat from now on, by default\n' +
@@ -895,8 +895,12 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
       '## 3. Give me my POLARIS block\n' +
       'End this reply with one POLARIS block covering those topics: the main facts (kind: fact), decisions (kind: decision), what only I can do (kind: waiting), open questions (kind: question), and for anything I am building, steps done (kind: done) and steps left (kind: next). Put a topic: line in every group. Exact format, groups split by a line with ---:\n\n' +
       '```\nPOLARIS v1\ntopic: <topic name>\n---\ntopic: <topic name>\nkind: fact\nsaid: MM/DD/YYYY\nwords: my exact words, if I said it\nproposal: one plain sentence\nbase: a link, file or chat name\n---\nEND POLARIS\n```\n\n' +
-      '## 4. Offer the harvest\n' +
-      'After the block, explain in two lines what the harvest is (going back through all my older chats so polaris has them too, one topic at a time) and ask if I want it. If I say next, start with the topic that matters most and use the same block format.\n\n' +
+      '## 4. Tell me how to save it\n' +
+      'Right after the block, tell me in plain steps: copy this whole reply, open polaris on my phone, paste it in the box on the jumpstart screen and tap Save it (later on, tap Save from Claude on the Home screen instead). Wait until I say done.\n\n' +
+      '## 5. Offer the harvest\n' +
+      'Then explain in two lines what the harvest is (going back through all my older chats so polaris has them too, one topic at a time) and ask if I want it now. If yes: if you can search my chats across all my Projects, do it yourself, one topic per reply, and remind me each time to copy the reply and tap Save from Claude in polaris. If you can only see some of them, list my Projects for me and walk me through it: open Projects in the Claude sidebar, open one Project, start a new chat inside it, paste the harvest prompt (in polaris: Home, Copy harvest prompt) and send, then the next Project, and once more in a new chat outside Projects. Keep track of which Projects are done.\n\n' +
+      '## 6. Keep it going\n' +
+      'If you can create scheduled tasks, offer one (ask me first): once a week, catch up anything from my chats that week and give me one POLARIS block, and notify me so I can tap Save from Claude.\n\n' +
       'Rules: only what was actually said, done or decided. Dates as MM/DD/YYYY. Quote me word for word in words, never reword me. If you made a call without asking me, start the proposal with "assistant call:". Leave a field blank rather than guess. Never put passwords, keys or tokens in the record.\n\n' +
       '---\n' + frontDoor('claude');
   }
@@ -956,7 +960,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
       if (G) {
         h += '<div class="card js"><h1>Your jumpstart</h1><p class="dim">One prompt sets it all up. Claude finds what you\'ve been working on, saves it here, and from then on saves every chat on its own.</p>' +
           '<ol class="js-steps"><li><b>Copy your prompt</b><button class="btn primary" data-act="copy-jump">Copy jumpstart prompt</button></li>' +
-          '<li><b>Paste it into Claude</b><p class="small dim">Open the Claude app on your phone or computer and start a <b>new chat</b>. If your chats live in a Project, start it inside that Project. Paste and send. Using Cowork on a computer? Paste it there instead; it can do even more. Say yes if it asks to save.</p></li>' +
+          '<li><b>Paste it into Cowork</b><p class="small dim">On your computer, open the Claude app and go to <b>Cowork</b>. Paste and send. Cowork guides you through the rest, step by step: it tells you exactly what to click and when. Say yes when it asks to save or to set something up.</p><p class="small faint">No Cowork? Paste it into a new Claude chat instead.</p></li>' +
           '<li><b>Copy Claude\'s whole reply and paste it here</b><textarea id="js-text" placeholder="Paste the whole reply. polaris finds the POLARIS block." aria-label="Claude\'s reply">' + esc(ui.jsText || '') + '</textarea><p class="small faint">Claude on your computer? Copy there, then paste here. With the same Apple ID, your iPhone pastes what your Mac copied.</p></li></ol>' +
           '<div class="row between" style="margin-top:6px"><a class="small" href="#home" data-act="setup-later">Skip for now</a><button class="btn primary" data-act="js-save">Save it</button></div></div>';
         return h + '</div>';
