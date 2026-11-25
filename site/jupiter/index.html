@@ -262,6 +262,8 @@ body.focus{padding-bottom:env(safe-area-inset-bottom)!important} body.focus #nav
 .chip-row{margin:8px 0 4px}
 .projects-chip{display:inline-flex;align-items:center;gap:10px;padding:9px 16px 9px 12px;border-radius:12px;background:#fafafa;color:#1f1f1f;font:500 16px/1.2 -apple-system,system-ui,sans-serif;box-shadow:0 1px 0 rgba(0,0,0,.06),0 4px 14px rgba(0,0,0,.35)}
 .projects-chip svg{width:22px;height:22px;fill:none;stroke:#1f1f1f;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.homeline{margin:14px 0 6px;padding:10px 12px;border-radius:12px;background:var(--glass2);border:1px solid var(--line2);font-size:14px;color:var(--ink)}
+.card.whatsnew{border-color:var(--line2);background:linear-gradient(180deg,rgba(185,168,255,.18),rgba(185,168,255,.06))}
 </style>
 </head>
 <body>
@@ -573,7 +575,9 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     },
     persist: function () { try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {} }
   };
-  function save() { Store.save(S); }
+  var autoT = 0;
+  function canAuto() { return S && S.settings.dataMode === 'github' && S.settings.gh && S.settings.gh.owner && S.settings.gh.repo && Store.token && Store.token(); }
+  function save() { Store.save(S); if (canAuto() && !syncing) { clearTimeout(autoT); autoT = setTimeout(function () { sync(true); }, 2500); } }
 
   // ---------- helpers ----------
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -671,7 +675,8 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
       st.map(function (s) { var p = onRing(s[3]); return '<a class="station" href="#' + s[0] + '" style="left:' + p[0].toFixed(3) + '%;top:' + p[1].toFixed(3) + '%" aria-label="' + s[1] + '"><i></i><span class="lbl">' + s[1] + (s[2] !== '' ? '<small>' + s[2] + '</small>' : '') + '</span></a>'; }).join('') +
       '</div>' + resEl('desk') + '</section>';
     if (!S.topics.length) h += '<div class="card"><h2>Start here</h2><p class="dim">Set up your homes and get the text that teaches your AI chats how to hand things back.</p><a class="btn primary" href="#setup">Set up polaris</a> <button class="btn" data-act="load-example">Load an example</button></div>';
-    if (S.settings.setupDone) h += '<div class="card quick"><div><h3 style="margin:0">Save from Claude</h3><p class="small dim" style="margin:2px 0 0">Copy Claude\'s reply, then tap. polaris saves the box at the end of it.</p></div><button class="btn primary big" data-act="quick-save">Save from Claude</button></div>';
+    if (S.settings.setupDone && (S.settings.seenUpdate || 0) < 2 && (!S.settings.setupAt || S.settings.setupAt < '2026-11-25T18:30')) h += '<div class="card whatsnew"><h3 style="margin:0 0 4px">polaris got an update</h3><p class="small dim" style="margin:0 0 8px">Everything you saved is still here, untouched. Nothing to redo. New: <b>Save from Claude</b> (one tap, right below), <b>Switch devices</b> and optional <b>GitHub sync</b> in Settings to keep your phone and computer in step, and the harvest steps for each Project.</p><button class="btn sm" data-act="seen-update">Got it</button></div>';
+    if (S.settings.setupDone) h += '<div class="card quick"><div><h3 style="margin:0">Save from Claude</h3><p class="small dim" style="margin:2px 0 0">Copy Claude\'s reply on any device, then tap here. polaris saves the box at the end of it.</p></div><button class="btn primary big" data-act="quick-save">Save from Claude</button></div>';
     var steps = []; live(S.topics).forEach(function (t) { live(t.progress || []).forEach(function (x) { if (x.status !== 'done') steps.push([t, x]); }); });
     if (steps.length) {
       var tp = steps[0][0], all = live(tp.progress), dn = all.filter(function (x) { return x.status === 'done'; }).length;
@@ -962,7 +967,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
           '<ol class="js-steps"><li><b>Copy your prompt</b><button class="btn primary" data-act="copy-jump">Copy jumpstart prompt</button></li>' +
           '<li><b>Paste it into Cowork</b><p class="small dim">On your computer, open the Claude app and go to <b>Cowork</b>. Paste and send. Cowork guides you through the rest, step by step: it tells you exactly what to click and when. Say yes when it asks to save or to set something up.</p><p class="small faint">No Cowork? Paste it into a new Claude chat instead.</p></li>' +
           '<li><b>Copy Claude\'s whole reply and paste it here</b><textarea id="js-text" placeholder="Paste the whole reply. polaris finds the POLARIS block." aria-label="Claude\'s reply">' + esc(ui.jsText || '') + '</textarea><p class="small faint">Claude on your computer? Copy there, then paste here. With the same Apple ID, your iPhone pastes what your Mac copied.</p></li></ol>' +
-          '<div class="row between" style="margin-top:6px"><a class="small" href="#home" data-act="setup-later">Skip for now</a><button class="btn primary" data-act="js-save">Save it</button></div></div>';
+          '<p class="homeline"><b>Use polaris on your phone.</b> Your computer is where Claude works. Copy a reply there, then tap Save from Claude here.</p><div class="row between" style="margin-top:6px"><a class="small" href="#home" data-act="setup-later">Skip for now</a><button class="btn primary" data-act="js-save">Save it</button></div></div>';
         return h + '</div>';
       }
       h += '<div class="card js"><h1>Your jumpstart</h1><p class="dim">One prompt does it all. It saves your whole ' + esc(J.toLowerCase()) + ' first, every step done and every step left, then sets Claude up to keep it current.</p>' +
@@ -971,7 +976,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
         '<li><b>Paste it into Claude on your MacBook</b><p class="small" style="margin:0">Where have you been building your site?</p><div class="seg" role="tablist" aria-label="Where you build">' + [['project', 'In a Claude Project'], ['cowork', 'In a folder on my Mac']].map(function (o) { return '<button role="tab" data-act="js-where" data-v="' + o[0] + '" class="' + (where === o[0] ? 'on' : '') + '">' + o[1] + '</button>'; }).join('') + '</div>' +
         (where === 'project' ? '<p class="small dim">Open the Claude app and go to the <b>Project</b> where you\'ve been building your site. Start a <b>new chat inside that Project</b>, paste, and send. That\'s all. Claude reads every chat and file in that Project, writes down your whole build, and saves it to the Project\'s memory so it\'s never lost. Say yes if it asks to save.</p>' : where === 'cowork' ? '<p class="small dim">Open the Claude app on your MacBook and go to <b>Cowork</b>. Add your website\'s folder (the + button, then Add folder). Paste and send. It reads your build, saves BUILD-PROGRESS.md in your project, and offers to set up an evening task that keeps it current without you. Say yes when it asks.</p>' : where === 'code' ? '<p class="small dim">Open the Claude app, go to <b>Code</b>, and open your website\'s folder. Paste, send, and say yes when it asks to save files. It writes BUILD-PROGRESS.md into your project and keeps it updated after every step.</p>' : '<p class="small dim">Open the Claude app and start a new chat. If your website chats live in a Project, start it inside that Project so Claude can search them. Paste and send.</p>') + '</li>' +
         '<li><b>Copy Claude\'s whole reply and paste it here</b><textarea id="js-text" placeholder="Paste the whole reply. polaris finds the POLARIS block." aria-label="Claude\'s reply">' + esc(ui.jsText || '') + '</textarea><p class="small faint">On your iPhone? Copy the reply on your Mac, then paste here. With the same Apple ID, your iPhone pastes what your Mac copied.</p></li></ol>' +
-        '<div class="row between" style="margin-top:6px"><a class="small" href="#home" data-act="setup-later">Skip for now</a><button class="btn primary" data-act="js-save">Save my build</button></div></div>';
+        '<p class="homeline"><b>Use polaris on your phone.</b> Your computer is where Claude works. Copy a reply there, then tap Save from Claude here.</p><div class="row between" style="margin-top:6px"><a class="small" href="#home" data-act="setup-later">Skip for now</a><button class="btn primary" data-act="js-save">Save my build</button></div></div>';
     } else {
       if (G) {
         var tps = live(S.topics), n = S.inbox.filter(function (i) { return i.chat === 'jumpstart' && i.status === 'applied'; }).length;
@@ -1034,7 +1039,14 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
       ['How polaris was made', '<p>polaris started as one person\'s fix for a real problem: dozens of AI chats and projects, each holding part of the story, and new chats repeating old plans or quietly overriding decisions. This is how he went about it. You can do the same, at any size.</p><ol><li><b>One pilot first.</b> He picked one topic and did the whole process on it before touching the rest.</li><li><b>Inventory.</b> He listed every chat and project he had, then grouped them into a handful of homes. Fewer, bigger homes beat many small ones.</li><li><b>Harvest in parallel.</b> Several AI helpers read the old chats at once, one topic each. Every fact kept the date it was said and the chat it came from.</li><li><b>He rules, the AI proposes.</b> Where chats disagreed, nothing was picked silently. Conflicts went on a list and he decided each one. By default the newest dated statement wins, and older lines stay in the record, marked superseded.</li><li><b>A Vault for files.</b> Images, documents and versions got a list saying what each is and where it lives.</li><li><b>A fresh check.</b> Before a topic counted as done, a fresh AI that had not seen the work read the record cold and answered questions from it.</li><li><b>One front door.</b> One start-here page every new chat reads first, so no chat starts from zero.</li><li><b>Keep it alive.</b> A running log of every correction he made, so nothing got lost when a chat ran long, and a weekly review.</li></ol><p class="dim">This app packs that whole method into one place, without the setup.</p>'],
       ['The weekly review', '<p>Once a week, open <a href="#review">Weekly review</a> and go down the list: sort the Inbox, clear Waiting, settle conflicts, move topic statuses, approve Vault entries, close Log rows, back up. polaris reminds you on Home when it is due.</p>'],
       ['The rules, and why', '<ul><li><b>Newest dated statement wins.</b> Chats repeat old plans. Dates settle it.</li><li><b>Nothing deleted without your yes.</b> polaris archives instead of deleting. Rejected Inbox items are kept.</li><li><b>Locked means locked.</b> Lock a line and it cannot be edited or archived until you unlock it.</li><li><b>Dates and sources on everything.</b> Every line says when it was said and where.</li><li><b>Pointers are links.</b> Put the link in base, and polaris makes it clickable.</li></ul>'],
-      ['Sync with GitHub (optional)', '<ol><li>Create a <b>private</b> repo on GitHub, for example <code>my-polaris</code>.</li><li>Go to GitHub Settings, Developer settings, Personal access tokens, <b>Fine-grained tokens</b>, Generate new token.</li><li>Repository access: <b>Only select repositories</b>, pick that one repo. Permissions: <b>Contents: Read and write</b>. Nothing else.</li><li>In polaris <a href="#settings">Settings</a>, choose GitHub, fill in owner and repo, paste the token, then Sync now.</li><li>Do the same on your other devices. Each sync pulls first, merges by item, then pushes. If both sides changed the same item, the newer one is kept and the other lands in your Inbox as held, so nothing is lost.</li></ol><p class="dim">The token is stored only on this device. Settings has a Forget token button. polaris never sends it anywhere except api.github.com.</p>'],
+      ['Keep your phone and computer in sync (GitHub)', '<p>Optional. Once it is on, every change you make on one device shows up on the other by itself: polaris syncs when you open it and a few seconds after every change. About 10 minutes, once. If you have Claude Cowork, paste this whole chapter into it and say <b>do this for me</b>: it can do every step except signing in and tapping Generate.</p><ol>' +
+        '<li><b>Make a free GitHub account</b> at <a href="https://github.com/signup" target="_blank" rel="noopener">github.com/signup</a> (skip if you have one). Note your username.</li>' +
+        '<li><b>Make a private home for your polaris.</b> Open <a href="https://github.com/new" target="_blank" rel="noopener">github.com/new</a>. Repository name: <code>my-polaris</code>. Choose <b>Private</b>. Tick <b>Add a README file</b>. Tap <b>Create repository</b>.</li>' +
+        '<li><b>Make a key just for it.</b> Open <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com/settings/personal-access-tokens/new</a>. Token name: <code>polaris</code>. Expiration: <b>1 year</b>. Repository access: <b>Only select repositories</b>, then pick <code>my-polaris</code>. Under Permissions, Repository permissions, set <b>Contents</b> to <b>Read and write</b>. Leave everything else alone. Tap <b>Generate token</b> and copy it (it starts with <code>github_pat_</code>). GitHub shows it only once.</li>' +
+        '<li><b>Connect this device.</b> In polaris, open <a href="#settings">Settings</a>, Your data, tap <b>GitHub sync</b>. Owner: your GitHub username. Repo: <code>my-polaris</code>. Leave Branch <code>main</code> and File <code>polaris.json</code>. Paste the token. Tap <b>Save and sync now</b>. You should see <b>Synced</b>.</li>' +
+        '<li><b>Connect your other device.</b> Open your polaris link there, Settings, GitHub sync, same owner and repo, paste the same token, <b>Save and sync now</b>. Everything from the first device comes over and merges.</li></ol>' +
+        '<p><b>From then on</b> you do nothing: open polaris on either device and it is up to date. If both devices changed the same line, the newer one wins and the other lands in your Inbox as held, so nothing is lost.</p>' +
+        '<p class="dim">The key is stored only on your devices and is only ever sent to api.github.com. To stop, Settings has Forget token. When the key expires next year, make a new one (step 3) and paste it in.</p>'],
       ['Install it on your phone', '<p><b>iPhone or iPad</b>: open polaris in Safari, tap Share, then <b>Add to Home Screen</b>. It opens full screen and works offline. Installed apps keep their data more reliably than a browser tab, so install before you rely on it.</p><p><b>Android</b>: in Chrome, tap the menu, then <b>Install app</b>. Or install the polaris APK if you were given one.</p><p><b>Computer</b>: in Chrome or Edge, use the install icon in the address bar.</p>'],
       ['Backups and privacy', '<p>polaris has no server and no account. On this device, your record lives in browser storage. Export a backup from <a href="#settings">Settings</a> every week or two (the weekly review reminds you). The Markdown export gives you a folder of readable files, one per topic, that you can drop into any repo or notes app.</p><p class="dim">Do not paste passwords, card numbers or other people\'s private details into polaris or your chats.</p>']
     ];
@@ -1052,6 +1064,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
       '<div class="row"><div style="flex:1;min-width:140px"><label for="gh-branch">Branch</label><input type="text" id="gh-branch" value="' + esc(gh.branch) + '"></div><div style="flex:1;min-width:140px"><label for="gh-path">File</label><input type="text" id="gh-path" value="' + esc(gh.path) + '"></div></div>' +
       '<label for="gh-token">Token ' + (tok ? '(saved on this device)' : '') + '</label><input type="password" id="gh-token" placeholder="' + (tok ? '••••••••  leave blank to keep' : 'github_pat_…') + '" autocomplete="off">' +
       '<div class="row" style="margin-top:12px"><button class="btn primary" data-act="gh-save-sync">Save and sync now</button>' + (tok ? '<button class="btn danger" data-act="gh-forget">Forget token</button>' : '') + '</div></div>';
+    h += '<div class="card"><h2>Switch devices</h2><p class="small dim">Your phone is your polaris; your computer is where Claude works. To bring everything over to another device: tap <b>Copy my polaris</b> here, then on the other device tap <b>Paste from my other device</b>. On an iPhone and Mac with the same Apple ID, what you copy on one pastes on the other. Nothing is overwritten: both sides are merged. Want it to happen by itself? Turn on <a href="#guide">GitHub sync</a> (Guide, Keep your phone and computer in sync).</p><div class="row"><button class="btn primary" data-act="move-copy">Copy my polaris</button><button class="btn" data-act="move-paste">Paste from my other device</button></div></div>';
     h += '<div class="card"><h2>Backup and export</h2><div class="row"><button class="btn primary" data-act="export-json">Export backup (.json)</button><button class="btn" data-act="export-md">Export Markdown (.zip)</button><label class="btn" style="margin:0;color:var(--ink)">Import backup<input type="file" id="imp" accept=".json,application/json" hidden></label></div><p class="small dim">Import merges into what you have. Nothing here is overwritten without asking.</p></div>';
     h += '<div class="card"><h2>Teach your chats</h2><div class="row"><button class="btn" data-act="copy-front" data-v="claude">Copy start-here for Claude</button><button class="btn" data-act="copy-front" data-v="chatgpt">Copy for ChatGPT</button><button class="btn" data-act="copy-handoff">Copy handoff prompt</button><button class="btn" data-act="copy-harvest">Copy harvest prompt</button><button class="btn" data-act="copy-catchup">Copy weekly catch-up</button></div><details class="ch" style="margin-top:10px"><summary>Preview</summary><pre class="code">' + esc(frontDoor('claude')) + '</pre></details></div>';
     h += '<div class="card"><h2>You</h2><label for="st-name">Name your chats use</label><div class="row"><input type="text" id="st-name" value="' + esc(S.profile.name) + '" style="flex:1"><button class="btn" data-act="save-name">Save</button></div><label>Rules</label>' + S.settings.rules.map(function (r) { return '<label class="check"><input type="checkbox" data-act="rule" data-v="' + esc(r.id) + '"' + (r.on ? ' checked' : '') + '><span>' + esc(r.text) + '</span></label>'; }).join('') + '<div class="row"><a class="btn" href="#setup">Run setup again</a></div></div>';
@@ -1188,10 +1201,11 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     });
   }
   var syncing = false;
-  function sync() {
+  function sync(quiet) {
     if (syncing) return; var g = S.settings.gh;
-    if (!g.owner || !g.repo) { toast('Add owner and repo first'); return; }
-    syncing = true; toast('Syncing…');
+    if (!g.owner || !g.repo) { if (!quiet) toast('Add owner and repo first'); return; }
+    if (quiet && !navigator.onLine) return;
+    syncing = true; if (!quiet) toast('Syncing…');
     var path = '/repos/' + encodeURIComponent(g.owner) + '/' + encodeURIComponent(g.repo) + '/contents/' + g.path.split('/').map(encodeURIComponent).join('/');
     var ref = '?ref=' + encodeURIComponent(g.branch || 'main'), merged = 0;
     function push(sha) {
@@ -1208,9 +1222,10 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
       }
       return push(sha);
     }).then(function (res) {
-      S.meta.lastSync = C.now(); S.meta.lastSyncSha = res && res.content ? res.content.sha : ''; S.meta.lastBackup = C.now(); save(); render();
-      toast(merged ? 'Synced. ' + merged + ' clash' + (merged > 1 ? 'es' : '') + ' held in your Inbox.' : 'Synced', 3500);
+      S.meta.lastSync = C.now(); S.meta.lastSyncSha = res && res.content ? res.content.sha : ''; S.meta.lastBackup = C.now(); Store.save(S); render();
+      if (!quiet || merged) toast(merged ? 'Synced. ' + merged + ' clash' + (merged > 1 ? 'es' : '') + ' held in your Inbox.' : 'Synced', 3500);
     }).catch(function (e) {
+      if (quiet && e.status === 409) return;
       toast(e.status === 409 ? 'Changed on another device mid-sync. Try again.' : e.status === 401 ? 'GitHub did not accept the token.' : e.status === 403 ? 'The token cannot write to this repo.' : 'Sync failed: ' + e.message, 4500);
     }).then(function () { syncing = false; });
   }
@@ -1236,6 +1251,18 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
       if (navigator.clipboard && navigator.clipboard.readText && window.isSecureContext) navigator.clipboard.readText().then(done, function () { go('capture'); toast('Paste the reply here'); });
       else { go('capture'); toast('Paste the reply here'); }
     },
+    'move-copy': function () { copy('POLARIS STATE v1\n' + JSON.stringify(S)); },
+    'move-paste': function () {
+      function take(txt) {
+        txt = String(txt || '').replace(/^\s*POLARIS STATE v1\s*/, '');
+        var j; try { j = JSON.parse(txt); } catch (e) { toast('Nothing to bring over. On the other device, tap Copy my polaris first.', 5000); return; }
+        var errs = C.validate(j); if (errs.length) { toast(errs[0], 5000); return; }
+        var m = C.merge(S, j, ''); S = m.state; save(); render(); toast('Brought over and merged' + (m.clashes ? '. ' + m.clashes + ' clashes held in Inbox.' : ''), 4000);
+      }
+      if (navigator.clipboard && navigator.clipboard.readText && window.isSecureContext) navigator.clipboard.readText().then(take, function () { toast('Allow paste, then tap again'); });
+      else toast('Paste is blocked in this browser. Use Export backup and Import backup instead.', 5000);
+    },
+    'seen-update': function () { S.settings.seenUpdate = 2; save(); render(); },
     'harvest-hide': function () { S.settings.harvestHidden = true; save(); render(); },
     'copy-catchup': function () { copy(catchupPrompt()); },
     'copy-front': function (v) { copy(frontDoor(v)); },
@@ -1370,6 +1397,8 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     document.body.addEventListener('change', onChange);
     if (!S.settings.setupDone && !S.topics.length && (!location.hash || location.hash === '#home')) location.hash = 'setup';
     render(); stars(); sw();
+    if (canAuto()) setTimeout(function () { sync(true); }, 800);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden && canAuto()) sync(true); });
   });
   window.__polaris = { state: function () { return S; }, version: VERSION };
 })();
