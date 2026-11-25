@@ -141,10 +141,12 @@ pre.code{white-space:pre-wrap;background:rgba(5,3,20,.6);border:1px solid var(--
   radial-gradient(circle at 56% 34%,rgba(20,10,70,.22) 0 3%,transparent 4%);mix-blend-mode:multiply}
 .hero .planet.art{background:center/cover no-repeat var(--art);border-radius:50%;width:44%;aspect-ratio:1;box-shadow:0 0 60px rgba(138,116,255,.38),0 0 150px rgba(138,116,255,.14);animation:none!important}
 .hero .planet.art::after{display:none}
-.hero .station{position:absolute;z-index:3;transform:translate(-50%,-7px);display:flex;flex-direction:column;align-items:center;gap:3px;text-decoration:none;color:var(--ink);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:2px 6px;border-radius:10px}
-.hero .station i{width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff,#b9a8ff 50%,#5a3fd8);box-shadow:0 0 12px rgba(185,168,255,.9);transition:transform .2s}
-.hero .station small{font-size:10px;color:var(--dim);letter-spacing:0;text-transform:none;font-weight:700;margin-top:-2px}
+.hero .station{position:absolute;z-index:3;width:14px;height:14px;transform:translate(-50%,-50%);text-decoration:none;color:var(--ink)}
+.hero .station i{position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff,#b9a8ff 50%,#5a3fd8);box-shadow:0 0 12px rgba(185,168,255,.9);transition:transform .2s}
+.hero .station .lbl{position:absolute;left:50%;top:18px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+.hero .station small{font-size:10px;color:var(--dim);letter-spacing:0;text-transform:none;font-weight:700}
 .hero .station:hover i,.hero .station:focus-visible i{transform:scale(1.35)}
+.hero .station::after{content:"";position:absolute;inset:-12px}
 .resident{position:relative;aspect-ratio:400/1276}
 .resident i{position:absolute;inset:0;background:center bottom/contain no-repeat var(--res)}
 .resident i.h,.resident i.c{opacity:0}
@@ -589,7 +591,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     var res = resEl('mob');
     var h = top() + '<div class="wrap"><div class="intro">' + res + '<h1>' + (S.profile.name ? 'Hi ' + esc(S.profile.name) + '.' : 'Your polaris') + '</h1><p class="dim small">One record per topic. Newest dated statement wins. Nothing gets lost between chats.</p></div>' +
       '<section class="hero" aria-label="Your polaris"><div class="orb"><div class="back">' + ring(false) + '</div><div class="planet' + art + '"></div><div class="front">' + ring(true) + '</div>' +
-      st.map(function (s) { var p = onRing(s[3]); return '<a class="station" href="#' + s[0] + '" style="left:' + p[0].toFixed(1) + '%;top:' + p[1].toFixed(1) + '%"><i></i>' + s[1] + (s[2] !== '' ? '<small>' + s[2] + '</small>' : '') + '</a>'; }).join('') +
+      st.map(function (s) { var p = onRing(s[3]); return '<a class="station" href="#' + s[0] + '" style="left:' + p[0].toFixed(3) + '%;top:' + p[1].toFixed(3) + '%" aria-label="' + s[1] + '"><i></i><span class="lbl">' + s[1] + (s[2] !== '' ? '<small>' + s[2] + '</small>' : '') + '</span></a>'; }).join('') +
       '</div>' + resEl('desk') + '</section>';
     if (!S.topics.length) h += '<div class="card"><h2>Start here</h2><p class="dim">Set up your homes and get the text that teaches your AI chats how to hand things back.</p><a class="btn primary" href="#setup">Set up polaris</a> <button class="btn" data-act="load-example">Load an example</button></div>';
     var nudges = [];

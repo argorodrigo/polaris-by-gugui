@@ -118,7 +118,7 @@
     var res = resEl('mob');
     var h = top() + '<div class="wrap"><div class="intro">' + res + '<h1>' + (S.profile.name ? 'Hi ' + esc(S.profile.name) + '.' : 'Your polaris') + '</h1><p class="dim small">One record per topic. Newest dated statement wins. Nothing gets lost between chats.</p></div>' +
       '<section class="hero" aria-label="Your polaris"><div class="orb"><div class="back">' + ring(false) + '</div><div class="planet' + art + '"></div><div class="front">' + ring(true) + '</div>' +
-      st.map(function (s) { var p = onRing(s[3]); return '<a class="station" href="#' + s[0] + '" style="left:' + p[0].toFixed(1) + '%;top:' + p[1].toFixed(1) + '%"><i></i>' + s[1] + (s[2] !== '' ? '<small>' + s[2] + '</small>' : '') + '</a>'; }).join('') +
+      st.map(function (s) { var p = onRing(s[3]); return '<a class="station" href="#' + s[0] + '" style="left:' + p[0].toFixed(3) + '%;top:' + p[1].toFixed(3) + '%" aria-label="' + s[1] + '"><i></i><span class="lbl">' + s[1] + (s[2] !== '' ? '<small>' + s[2] + '</small>' : '') + '</span></a>'; }).join('') +
       '</div>' + resEl('desk') + '</section>';
     if (!S.topics.length) h += '<div class="card"><h2>Start here</h2><p class="dim">Set up your homes and get the text that teaches your AI chats how to hand things back.</p><a class="btn primary" href="#setup">Set up polaris</a> <button class="btn" data-act="load-example">Load an example</button></div>';
     var nudges = [];
