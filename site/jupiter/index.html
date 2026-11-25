@@ -1399,6 +1399,8 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     render(); stars(); sw();
     if (canAuto()) setTimeout(function () { sync(true); }, 800);
     document.addEventListener('visibilitychange', function () { if (!document.hidden && canAuto()) sync(true); });
+    setInterval(function () { if (!document.hidden && canAuto()) sync(true); }, 30000);
+    window.addEventListener('online', function () { if (canAuto()) sync(true); });
   });
   window.__polaris = { state: function () { return S; }, version: VERSION };
 })();
