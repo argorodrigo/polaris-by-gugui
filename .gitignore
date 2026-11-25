@@ -1,0 +1,5 @@
+www/
+www-*/
+node_modules/
+*.jks
+*password*

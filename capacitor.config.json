@@ -1,0 +1,7 @@
+{
+  "appId": "com.argorodrigo.polaris",
+  "appName": "polaris",
+  "webDir": "www",
+  "android": { "backgroundColor": "#07051a", "allowMixedContent": false },
+  "server": { "androidScheme": "https" }
+}
