@@ -106,6 +106,7 @@
     var st = [['topics', 'Topics', c.topics, 180], ['inbox', 'Inbox', c.inbox, 312], ['waiting', 'Waiting', c.waiting, 0], ['vault', 'Vault', c.vault, 52], ['log', 'Log', c.log, 128], ['guide', 'Guide', '', 228]];
     var pArt = S.settings.planetArt || window.POLARIS_ART.planet, rArt = S.settings.residentArt || window.POLARIS_ART.resident;
     var art = pArt ? ' art" style="--art:url(' + esc(pArt) + ')' : '';
+    function moonOf(k) { var m = (window.POLARIS_ART || {}).moons; return m && m[k]; }
     var RX = 44, RY = 15, ROT = -16 * Math.PI / 180;
     function onRing(deg) { var a = deg * Math.PI / 180, x = RX * Math.cos(a), y = RY * Math.sin(a); return [50 + x * Math.cos(ROT) - y * Math.sin(ROT), 50 + x * Math.sin(ROT) + y * Math.cos(ROT)]; }
     var ringPath = function (r1, r2, front) { // half ellipse: front = lower half (in front of planet)
@@ -120,10 +121,10 @@
     var res = resEl('mob');
     var h = top() + '<div class="wrap"><div class="intro">' + res + '<h1>' + (S.profile.name ? 'Hi ' + esc(S.profile.name) + '.' : 'Your polaris') + '</h1><p class="dim small">One record per topic. Newest dated statement wins. Nothing gets lost between chats.</p></div>' +
       '<section class="hero" aria-label="Your polaris"><div class="orb"><div class="back">' + ring(false) + '</div><div class="planet' + art + '"></div>' + (window.POLARIS_ART.heroSign && SIGNS[window.POLARIS_ART.sign] ? '<span class="hero-sign" aria-hidden="true" style="--pglow:' + esc(window.POLARIS_ART.accent || '#8a74ff') + '">' + SIGNS[window.POLARIS_ART.sign] + '</span>' : '') + '<div class="front">' + ring(true) + '</div>' +
-      st.map(function (s) { var p = onRing(s[3]); return '<a class="station" href="#' + s[0] + '" style="left:' + p[0].toFixed(3) + '%;top:' + p[1].toFixed(3) + '%" aria-label="' + s[1] + '"><i></i><span class="lbl">' + s[1] + (s[2] !== '' ? '<small>' + s[2] + '</small>' : '') + '</span></a>'; }).join('') +
+      st.map(function (s) { var p = onRing(s[3]); return '<a class="station" href="#' + s[0] + '" style="left:' + p[0].toFixed(3) + '%;top:' + p[1].toFixed(3) + '%" aria-label="' + s[1] + (moonOf(s[0]) ? ', ' + moonOf(s[0]).name : '') + '">' + (moonOf(s[0]) ? '<i class="moon" style="--moon:url(' + moonOf(s[0]).img + ')"></i>' : '<i></i>') + '<span class="lbl">' + s[1] + (moonOf(s[0]) ? '<em class="moonname">' + esc(moonOf(s[0]).name) + '</em>' : '') + (s[2] !== '' ? '<small>' + s[2] + '</small>' : '') + '</span></a>'; }).join('') +
       '</div>' + resEl('desk') + '</section>';
     if (!S.topics.length) h += '<div class="card"><h2>Start here</h2><p class="dim">Set up your homes and get the text that teaches your AI chats how to hand things back.</p><a class="btn primary" href="#setup">Set up polaris</a> <button class="btn" data-act="load-example">Load an example</button></div>';
-    if (S.settings.setupDone && (S.settings.seenUpdate || 0) < 2 && (!S.settings.setupAt || S.settings.setupAt < '2026-11-25T18:30')) h += '<div class="card whatsnew"><h3 style="margin:0 0 4px">polaris got an update</h3><p class="small dim" style="margin:0 0 8px">Everything you saved is still here, untouched. Nothing to redo. New: <b>Save from Claude</b> (one tap, right below), <b>Switch devices</b> and optional <b>GitHub sync</b> in Settings to keep your phone and computer in step, and the harvest steps for each Project.</p><button class="btn sm" data-act="seen-update">Got it</button></div>';
+    if (!(window.POLARIS_ART || {}).fresh && S.settings.setupDone && (S.settings.seenUpdate || 0) < 2 && (!S.settings.setupAt || S.settings.setupAt < '2026-11-25T18:30')) h += '<div class="card whatsnew"><h3 style="margin:0 0 4px">polaris got an update</h3><p class="small dim" style="margin:0 0 8px">Everything you saved is still here, untouched. Nothing to redo. New: <b>Save from Claude</b> (one tap, right below), <b>Switch devices</b> and optional <b>GitHub sync</b> in Settings to keep your phone and computer in step, and the harvest steps for each Project.</p><button class="btn sm" data-act="seen-update">Got it</button></div>';
     h += '<div class="card quick"><div><h3 style="margin:0">Save from Claude</h3><p class="small dim" style="margin:2px 0 0">Copy Claude\'s reply on any device, then tap here. polaris saves the box at the end of it.</p></div><button class="btn primary big" data-act="quick-save">Save from Claude</button></div>';
     var steps = []; live(S.topics).forEach(function (t) { live(t.progress || []).forEach(function (x) { if (x.status !== 'done') steps.push([t, x]); }); });
     if (steps.length) {
@@ -337,9 +338,9 @@
       '<li>Claude goes topic by topic. Copy each reply, come back, tap <b>Save from Claude</b>. Type <b>next</b> in Claude for the next topic. Stop whenever you like; type next later to pick up.</li></ol>' +
       '<div class="row"><button class="btn" data-act="copy-harvest">Copy harvest prompt</button>' + (dismiss ? '<button class="btn ghost sm" data-act="harvest-hide">Hide this</button>' : '') + '</div></div>';
   }
-  function syncCard() {
+  function syncCard(intro) {
     var on = S.settings.dataMode === 'pair' && pairStore(), P = S.settings.pair || {};
-    var h = '<div class="card sync" id="sync"><h2>Sync my devices</h2>';
+    var h = '<div class="card sync" id="sync">' + (intro || '<h2>Sync my devices</h2>');
     if (on) {
       h += '<p class="small"><span class="tag ok">On</span> Your phone and computer stay in step on their own. ' + (P.at ? 'Last synced ' + fmtDay(P.at) + '.' : '') + '</p>' +
         '<div class="row"><button class="btn primary" data-act="pair-now">Sync now</button><button class="btn" data-act="pair-show">' + (ui.pairShow ? 'Hide my code' : 'Show my code') + '</button><button class="btn ghost sm" data-act="pair-off">Turn off on this device</button></div>';
@@ -449,7 +450,7 @@
           (tps.length ? '<ul class="steps-list">' + tps.map(function (t) { return '<li><a href="#topic/' + esc(t.id) + '" data-act="setup-finish">' + esc(t.name) + '</a></li>'; }).join('') + '</ul>' : '') +
           '<h3>From now on, it saves itself</h3><p class="small dim">You never have to ask. Whenever something is decided or finished, Claude ends its reply with a POLARIS box on its own. Copy that reply, open polaris, tap <b>Save from Claude</b>. That\'s it.</p>' +
           '<p class="small faint">Quick check: start a new Claude chat and decide something small. If the reply ends with a POLARIS box, you\'re set. If not, tap <button class="linkish" data-act="copy-front" data-v="claude">Copy start-here</button> and paste it in Claude, Settings, Profile, the personal preferences box.</p>' +
-          '</div>' + harvestCard(false) + '<div class="card"><div class="row"><a class="btn primary" href="#home" data-act="setup-finish">Go home</a></div></div>';
+          '</div>' + syncCard('<h2>Your phone and computer, as one</h2><p class="small dim">polaris works the same on your iPhone and your computer. Link them once, right here, and everything you save on one shows up on the other on its own, wherever you open it. Start on the device you\'re on now, then open polaris on the other one and paste the code.</p>') + harvestCard(false) + '<div class="card"><div class="row"><a class="btn primary" href="#home" data-act="setup-finish">Go home</a></div></div>';
         return h + '</div>';
       }
       var t = topicByName(J), all = t ? live(t.progress || []) : [], dn = all.filter(function (x) { return x.status === 'done'; }), nx = all.filter(function (x) { return x.status !== 'done'; });

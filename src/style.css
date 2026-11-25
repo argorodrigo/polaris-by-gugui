@@ -252,3 +252,7 @@ body.focus{padding-bottom:env(safe-area-inset-bottom)!important} body.focus #nav
 
 /* iOS zooms into any field under 16px and stays zoomed; keep fields at 16px on touch screens */
 @media (pointer:coarse){input,select,textarea,.codebox textarea,#pair-in{font-size:16px!important}}
+
+/* Jupiter edition: stations are Jupiter's real moons */
+.hero .station i.moon{background:var(--moon) center/100% 100% no-repeat;box-shadow:none;filter:drop-shadow(0 0 4px rgba(255,222,180,.45))}
+.hero .station .moonname{font-style:normal;font-size:9px;font-weight:600;letter-spacing:.05em;text-transform:none;color:#E8B57A;opacity:.9}
