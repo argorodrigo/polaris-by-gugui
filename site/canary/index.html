@@ -732,7 +732,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     document.getElementById('side').innerHTML = lockup() + SIDE.map(function (n) {
       var b = badge[n[0]];
       return '<a class="item ' + (on(n[0]) && n[0] !== 'more' ? 'on' : '') + '" href="#' + n[0] + '">' + ic(n[2] || n[0]) + n[1] + (b ? '<span class="badge">' + b + '</span>' : '') + '</a>';
-    }).join('') + '<div class="foot">' + (!Store.ok ? 'Not saving on this device' : S.settings.dataMode === 'github' ? 'Syncs to GitHub' : 'Saved on this device') + '<br>v' + VERSION + '</div>';
+    }).join('') + '<div class="foot">' + (!Store.ok ? 'Not saving on this device' : S.settings.dataMode === 'github' ? 'Syncs to GitHub' : (S.settings.dataMode === 'pair' && pairStore()) ? 'Syncs with your devices' : 'Saved on this device') + '<br>v' + VERSION + '</div>';
   }
   function top(title) { return '<div class="top">' + lockup() + (title ? '' : '') + '<a class="icon-btn" href="#settings" aria-label="Settings">' + ic('settings').replace('<svg', '<svg width="22" height="22"') + '</a></div>'; }
 
