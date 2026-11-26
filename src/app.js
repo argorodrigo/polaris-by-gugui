@@ -330,7 +330,7 @@
   var PROJECTS_CHIP = '<span class="projects-chip" role="img" aria-label="Projects, in the Claude sidebar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5h10M5.5 7.5h13"/><rect x="4" y="10.5" width="16" height="9.5" rx="2.5"/><path d="M4 13.5h16"/></svg>Projects</span>';
   function harvestCard(dismiss) {
     return '<div class="card harvest"><h3>Catch up your old chats <span class="faint small">optional</span></h3>' +
-      '<p class="small dim">From now on every chat saves itself. The harvest goes back through the chats you already had, so polaris has those too. You do it once, at your own pace.</p>' +
+      '<p class="small dim">From now on Claude ends each chat with a save box, and you tap Save from Claude. The harvest goes back through the chats you already had, so polaris has those too. You do it once, at your own pace.</p>' +
       '<ol class="small steps-list"><li>Tap <b>Copy harvest prompt</b>.</li>' +
       '<li>In Claude, open <b>Projects</b> in the sidebar. It looks like this:<div class="chip-row">' + PROJECTS_CHIP + '</div></li>' +
       '<li>Open one Project, start a <b>new chat inside it</b>, paste and send. Claude can only see the chats in the Project you\'re in, so <b>do this once in each of your Projects</b>.</li>' +
@@ -452,7 +452,7 @@
         var tps = live(S.topics), n = S.inbox.filter(function (i) { return i.chat === 'jumpstart' && i.status === 'applied'; }).length;
         h += '<div class="card js"><h1>Your polaris is set up.</h1><p class="dim">' + n + ' thing' + (n === 1 ? '' : 's') + ' saved across ' + tps.length + ' topic' + (tps.length === 1 ? '' : 's') + '.</p>' +
           (tps.length ? '<ul class="steps-list">' + tps.map(function (t) { return '<li><a href="#topic/' + esc(t.id) + '" data-act="setup-finish">' + esc(t.name) + '</a></li>'; }).join('') + '</ul>' : '') +
-          '<h3>From now on, it saves itself</h3><p class="small dim">You never have to ask. Whenever something is decided or finished, Claude ends its reply with a POLARIS box on its own. Copy that reply, open polaris, tap <b>Save from Claude</b>. That\'s it.</p>' +
+          '<h3>From now on, Claude writes the save box</h3><p class="small dim">You never have to ask. Whenever something is decided or finished, Claude ends its reply with a POLARIS box on its own. Copy that reply, open polaris, tap <b>Save from Claude</b>. That\'s it.</p>' +
           '<p class="small faint">Quick check: start a new Claude chat and decide something small. If the reply ends with a POLARIS box, you\'re set. If not, tap <button class="linkish" data-act="copy-front" data-v="claude">Copy start-here</button> and paste it in Claude, Settings, Profile, the personal preferences box.</p>' +
           '</div>' + syncCard('<h2>Your phone and computer, as one</h2><p class="small dim">polaris works the same on your iPhone and your computer. Link them once, right here, and everything you save on one shows up on the other on its own, wherever you open it. No accounts, and it\'s encrypted before it leaves your device.</p>') + harvestCard(false) + '<div class="card"><div class="row"><a class="btn primary" href="#home" data-act="setup-finish">Go home</a></div></div>';
         return h + '</div>';
@@ -460,7 +460,7 @@
       var t = topicByName(J), all = t ? live(t.progress || []) : [], dn = all.filter(function (x) { return x.status === 'done'; }), nx = all.filter(function (x) { return x.status !== 'done'; });
       h += '<div class="card js"><h1>Your ' + esc(J.toLowerCase()) + ' is saved.</h1><p class="dim">' + dn.length + ' step' + (dn.length === 1 ? '' : 's') + ' done, ' + nx.length + ' left.</p>' +
         (nx.length ? '<h3>Next up</h3><ol class="steps-list">' + nx.slice(0, 3).map(function (x) { return '<li>' + esc(x.text) + '</li>'; }).join('') + '</ol>' : '') +
-        '<h3>From now on, it saves itself</h3><p class="small dim">You never have to ask. Whenever a step is finished or something is decided, Claude ends its reply with a POLARIS box on its own. Copy that reply, open polaris, tap <b>Save from Claude</b>. That\'s it.</p>' +
+        '<h3>From now on, Claude writes the save box</h3><p class="small dim">You never have to ask. Whenever a step is finished or something is decided, Claude ends its reply with a POLARIS box on its own. Copy that reply, open polaris, tap <b>Save from Claude</b>. That\'s it.</p>' +
         '<p class="small faint">Quick check: start a new Claude chat and decide something small. If the reply ends with a POLARIS box, you\'re set. If not, tap <button class="linkish" data-act="copy-front" data-v="claude">Copy start-here</button> and paste it in Claude, Settings, Profile, the personal preferences box.</p>' +
         '</div>' + harvestCard(false) + '<div class="card" style="text-align:left">' +
         '<div class="row">' + (t ? '<a class="btn primary" href="#topic/' + esc(t.id) + '" data-act="setup-finish">See the whole build</a>' : '') + '<a class="btn" href="#home" data-act="setup-finish">Go home</a></div></div>';
@@ -583,7 +583,7 @@
   }
 
   // ---------- actions ----------
-  function findLine(t, id) { var hit = null; ['start', 'decisions', 'ideas', 'questions', 'conflicts', 'sources'].forEach(function (c) { t[c].forEach(function (x) { if (x.id === id) hit = { list: c, x: x }; }); }); return hit; }
+  function findLine(t, id) { var hit = null; ['start', 'decisions', 'ideas', 'questions', 'conflicts', 'sources', 'progress'].forEach(function (c) { (t[c] || []).forEach(function (x) { if (x.id === id) hit = { list: c, x: x }; }); }); return hit; }
   function touch(o) { o.updated = C.now(); return o; }
   function newItem(o) { o.id = C.uid(); o.created = C.now(); o.updated = C.now(); return o; }
   function ensureTopic(name) { var t = topicByName(name); if (t) return t; t = C.emptyTopic(name); S.topics.push(t); return t; }
@@ -722,15 +722,17 @@
         }
         if (g.status === 401) throw new Error('That code does not match. Copy it again from your other device.');
         if (g.status !== 200) throw new Error('Sync is not reachable right now. Your changes are saved here and will sync later.');
+        var theirsPrint = '';
         var step = g.unchanged ? Promise.resolve(false) : unseal(v, g.rev, g).then(function (theirs) {
           if (C.validate(theirs).length) throw new Error('The synced copy is not a polaris file.');
+          theirsPrint = C.fingerprint(theirs);
           var m = C.merge(S, theirs, P.synced ? (P.at || '') : ''); S = m.state; S.settings.pair = P; return m.clashes;
         });
         return step.then(function (clashes) {
           var pulled = !g.unchanged, remoteRev = g.rev;
-          var mustPush = S.meta.dirty || pulled;
+          var mustPush = S.meta.dirty || (pulled && C.fingerprint(S) !== theirsPrint);
           var finish = function (rev) { P.rev = rev; P.at = C.now(); P.synced = true; S.meta.dirty = false; S.meta.lastSync = P.at; Store.save(S); render(); if (clashes) toast('Synced. ' + clashes + ' clash' + (clashes > 1 ? 'es' : '') + ' held in your Inbox.', 4000); else if (!quiet) toast('Synced'); };
-          if (!mustPush) { P.rev = remoteRev; P.at = C.now(); return; }
+          if (!mustPush) { if (pulled) return finish(remoteRev); P.rev = remoteRev; P.at = C.now(); return; }  // nothing new to send: never write back what we just pulled
           return seal(v, remoteRev + 1, S).then(function (box) { box.expectedRev = remoteRev; return api(v, 'PUT', '', box); }).then(function (r) {
             if (r.status === 200) return finish(r.rev);
             if (r.status === 409 && tries < 3) { syncing = false; return pairSync(quiet, tries + 1); }
@@ -828,8 +830,18 @@
       function done(txt) {
         var r = C.parseHandoff(txt || '', { chat: 'Claude' });
         if (!r.items.length) { ui.capture = { text: txt || '', chat: '', result: null }; toast('No POLARIS box on your clipboard. Copy Claude\'s whole reply, then tap again.', 5000); go('capture'); return; }
+        var had = {}; S.topics.forEach(function (t) { had[t.id] = 1; });
         r.items.forEach(function (i) { S.inbox.push(i); }); var n = applyAll(r.items), left = r.items.length - n;
-        toast('Saved ' + n + ' item' + (n === 1 ? '' : 's') + (left ? '. ' + left + ' need a topic in the Inbox.' : ''), 4000); render();
+        if (!Store.ok) { toast('Not saved: this device is out of room. Export a backup in Settings.', 6000); render(); return; }
+        var names = {}, fresh = [];
+        r.items.forEach(function (i) { if (i.status === 'applied' && i.topic) { var t = topicByName(i.topic); if (t) { names[t.name] = 1; if (!had[t.id] && fresh.indexOf(t.name) < 0) fresh.push(t.name); } } });
+        var where = Object.keys(names);
+        var msg = n ? 'Filed ' + n + ' under ' + (where.length ? where.slice(0, 3).join(', ') + (where.length > 3 ? ' +' + (where.length - 3) : '') : 'your record') : 'Nothing filed yet';
+        if (fresh.length) msg += '. New topic: ' + fresh.slice(0, 2).join(', ');
+        if (left) msg += '. ' + left + ' waiting in your Inbox';
+        if (r.errors.length) msg += '. ' + r.errors.length + ' line' + (r.errors.length === 1 ? '' : 's') + ' needed a guess, check the Log';
+        if (r.errors.length) S.log.push(newItem({ type: 'ledger', text: 'Save from Claude: ' + r.errors.join(' '), fix: '', said: C.today(), status: 'open' }));
+        save(); toast(msg + '.', 6000); render();
       }
       if (navigator.clipboard && navigator.clipboard.readText && window.isSecureContext) navigator.clipboard.readText().then(done, function () { go('capture'); toast('Paste the reply here'); });
       else { go('capture'); toast('Paste the reply here'); }
@@ -991,7 +1003,8 @@
     render(); stars(); sw();
     if (canAuto()) setTimeout(function () { sync(true); }, 800);
     document.addEventListener('visibilitychange', function () { if (!document.hidden && canAuto()) sync(true); });
-    setInterval(function () { if (!document.hidden && canAuto()) sync(true); }, 30000);
+    var lastBusy = Date.now(); ['click', 'keydown', 'touchstart'].forEach(function (e) { document.addEventListener(e, function () { lastBusy = Date.now(); }, { passive: true }); });
+    var lastPoll = 0; setInterval(function () { if (document.hidden || !canAuto()) return; var idle = Date.now() - lastBusy > 300000; if (idle && Date.now() - lastPoll < 120000) return; lastPoll = Date.now(); sync(true); }, 30000);
     window.addEventListener('online', function () { if (canAuto()) sync(true); });
   });
   window.__polaris = { state: function () { return S; }, version: VERSION };

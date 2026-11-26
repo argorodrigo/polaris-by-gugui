@@ -178,6 +178,14 @@ var PolarisCore = (function () {
   var TOP = ['inbox', 'waiting', 'vault', 'log', 'reviews'];
   var SUB = ['start', 'decisions', 'ideas', 'conflicts', 'questions', 'sources', 'progress'];
   function same(a, b) { var x = Object.assign({}, a), y = Object.assign({}, b); delete x.updated; delete y.updated; return JSON.stringify(x) === JSON.stringify(y); }
+  // content print, ignoring device settings, timestamps of the file itself and list order:
+  // two copies with the same print hold the same record, so neither needs to be sent again
+  function canon(x) {
+    if (Array.isArray(x)) return '[' + x.map(canon).sort().join(',') + ']';
+    if (x && typeof x === 'object') return '{' + Object.keys(x).sort().map(function (k) { return JSON.stringify(k) + ':' + canon(x[k]); }).join(',') + '}';
+    return JSON.stringify(x === undefined ? null : x);
+  }
+  function fingerprint(s) { var o = {}; Object.keys(s || {}).forEach(function (k) { if (k !== 'settings' && k !== 'meta' && k !== 'profile') o[k] = s[k]; }); return canon(o); }
   function mergeList(mine, theirs, since, clashes, label) {
     var byId = {}, out = [];
     (mine || []).forEach(function (x) { byId[x.id] = x; out.push(x); });
@@ -271,6 +279,6 @@ var PolarisCore = (function () {
 
   return { SCHEMA: SCHEMA, KINDS: KINDS, uid: uid, now: now, today: today, slug: slug, normDate: normDate, dateKey: dateKey,
     parseHandoff: parseHandoff, emptyState: emptyState, emptyTopic: emptyTopic, defaultRules: defaultRules, migrate: migrate, validate: validate,
-    merge: merge, topicMarkdown: topicMarkdown, bundle: bundle, zip: zip, crc32: crc32, b64: b64, unb64: unb64 };
+    merge: merge, fingerprint: fingerprint, topicMarkdown: topicMarkdown, bundle: bundle, zip: zip, crc32: crc32, b64: b64, unb64: unb64 };
 })();
 if (typeof module !== 'undefined') module.exports = PolarisCore;
