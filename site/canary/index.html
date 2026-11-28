@@ -319,6 +319,18 @@ html[data-look="mars"] #nav .cap span.ic{box-shadow:0 6px 18px rgba(217,119,63,.
 .hero.looked .hero-sign img{filter:brightness(1.35) contrast(1.15) saturate(1.2)}
 .hero.looked .hero-sign svg{stroke-width:2.4}
 html[data-look="givre"] .hero.looked .hero-sign img{filter:brightness(2) contrast(1.2) saturate(1.1)}
+
+/* ---------- feed chips, edited-here lines, storage notes ---------- */
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 10px}
+.chips:empty{display:none}
+.chip{display:inline-block;font-size:12px;font-weight:800;padding:4px 11px;border-radius:999px;background:var(--glass2);border:1px solid var(--line2);color:var(--v1);text-decoration:none;letter-spacing:.02em}
+.chip.stale{color:var(--bad);background:rgba(255,157,180,.12);border-color:rgba(255,157,180,.45)}
+html[data-look="mars"] .chip.stale{color:#ffc2b4;background:rgba(214,58,44,.24);border-color:rgba(240,110,85,.7);box-shadow:0 0 14px rgba(217,119,63,.28)}
+.tag.edited{color:var(--teal)}
+.feedboth{margin-top:6px;padding:6px 10px;border-left:2px solid var(--line2);color:var(--dim)}
+.feedboth .theirs{margin:4px 0;color:var(--ink)}
+.feedboth .btn{margin-top:4px}
+.warnbox{border-color:var(--warn)}
 </style>
 </head>
 <body>
@@ -687,6 +699,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     ok: true,
     unreadable: false,  // saved data exists but could not be read: never write over it
     backend: 'idb',     // 'idb', or 'ls' when IndexedDB is not usable
+    noIdb: false,       // true when we fell back to localStorage because IndexedDB would not open
     mem: null,          // the saved record as text, as last read or written
     q: Promise.resolve(), pend: false,
     quota: 0, usage: 0,
@@ -695,7 +708,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
       var self = this;
       self.unreadable = false;
       function fallback() {
-        self.backend = 'ls';
+        self.backend = 'ls'; self.noIdb = true;  // the app warns plainly: this is a small 5 MB space, not the usual storage
         try { self.mem = localStorage.getItem(KEY); } catch (e) { self.unreadable = true; self.mem = null; }
       }
       return idb().then(function () { return Promise.all([idbGet(KEY), idbGet(SNAP_KEY)]); }).then(function (r) {
@@ -795,6 +808,9 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
   function syncState() { try { return JSON.parse(localStorage.getItem(SYNC_KEY) || '{}') || {}; } catch (e) { return {}; } }
   function putSyncState(o) { try { localStorage.setItem(SYNC_KEY, JSON.stringify(o)); } catch (e) {} }
   function syncOk() { putSyncState({ okAt: C.now() }); }
+  function syncUpdate() { var o = syncState(); o.upd = C.now(); putSyncState(o); }
+  function needsUpdate() { var st = syncState(); return !!(st.upd && (!st.okAt || st.upd > st.okAt)); }
+  var UPD_TEXT = 'This device is too old to open the synced copy yet. Update iOS (Settings, General, Software Update), or your browser, then open polaris again. Nothing is lost, and nothing here was changed.';
   function syncFail(msg) { var o = syncState(); o.errAt = C.now(); o.errMsg = msg; putSyncState(o); }
   // short plain message for any sync error
   function plainErr(e, who) {
@@ -811,6 +827,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
   }
   function syncStatus() {
     var st = syncState(), failed = st.errAt && (!st.okAt || st.errAt > st.okAt);
+    if (needsUpdate() && (!failed || st.upd >= st.errAt)) return '<p class="small" id="sync-status"><span class="tag">Update needed</span> ' + esc(UPD_TEXT) + '</p>';
     if (failed) return '<p class="small" id="sync-status"><span class="tag warn">Not synced</span> Last try failed at ' + esc(fmtAt(st.errAt)) + ': ' + esc(st.errMsg || 'something went wrong') + '. It will try again on its own.</p>';
     if (st.okAt) return '<p class="small dim" id="sync-status">Last synced ' + esc(fmtAt(st.okAt)) + '</p>';
     return '';
@@ -913,7 +930,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     var A = window.POLARIS_ART, blink = !S.settings.residentArt && A.residentHalf && A.residentClosed;
     function resEl(cls) { if (!rArt) return ''; return '<div class="resident ' + cls + (blink ? ' blinks' : '') + '"' + (A.rar ? ' style="--rar:' + esc(A.rar) + '"' : '') + ' role="img" aria-label="polaris resident"><i style="--res:url(' + esc(rArt) + ')"></i>' + (blink ? '<i class="h" style="--res:url(' + esc(A.residentHalf) + ')"></i><i class="c" style="--res:url(' + esc(A.residentClosed) + ')"></i>' : '') + '</div>'; }
     var res = resEl('mob');
-    var h = top() + '<div class="wrap"><div class="intro">' + res + '<h1>' + (S.profile.name ? 'Hi ' + esc(S.profile.name) + '.' : 'Your polaris') + '</h1><p class="dim small">One record per topic. Newest dated statement wins. Nothing gets lost between chats.</p></div>' +
+    var h = top() + '<div class="wrap"><div class="intro">' + res + '<h1>' + (S.profile.name ? 'Hi ' + esc(S.profile.name) + '.' : 'Your polaris') + '</h1><p class="dim small">One record per topic. Newest dated statement wins. Nothing gets lost between chats.</p></div><div id="home-alerts">' + alertsHtml() + '</div>' +
       '<section class="hero' + (A.looks ? ' looked' : '') + '" aria-label="Your polaris"' + (A.looks ? ' style="--pglow:' + esc(A.accent || '#8a74ff') + '"' : '') + '><div class="orb"><div class="back">' + ring(false) + '</div><div class="planet' + art + '"></div>' + (window.POLARIS_ART.heroSign && signHtml(window.POLARIS_ART) ? '<span class="hero-sign" aria-hidden="true" style="--pglow:' + esc(window.POLARIS_ART.accent || '#8a74ff') + '">' + signHtml(window.POLARIS_ART) + '</span>' : '') + '<div class="front">' + ring(true) + '</div>' +
       st.map(function (s) { var p = onRing(s[3]); return '<a class="station" href="#' + s[0] + '" style="left:' + p[0].toFixed(3) + '%;top:' + p[1].toFixed(3) + '%" aria-label="' + s[1] + (moonOf(s[0]) ? ', ' + moonOf(s[0]).name : '') + '">' + (moonOf(s[0]) ? '<i class="moon" style="--moon:url(' + moonOf(s[0]).img + ')"></i>' : ((window.POLARIS_ART || {}).dot ? '<i style="background:' + window.POLARIS_ART.dot[0] + ';box-shadow:' + window.POLARIS_ART.dot[1] + '"></i>' : '<i></i>')) + '<span class="lbl">' + s[1] + (moonOf(s[0]) ? '<em class="moonname">' + esc(moonOf(s[0]).name) + '</em>' : '') + (s[2] !== '' ? '<small>' + s[2] + '</small>' : '') + '</span></a>'; }).join('') +
       '</div>' + resEl('desk') + '</section>';
@@ -980,10 +997,12 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     if (tab === 'progress') tags += '<span class="tag ' + (x.status === 'done' ? 'ok' : 'warn') + '">' + (x.status === 'done' ? 'done' : 'next') + '</span> ';
     if (tab === 'questions') tags += '<span class="tag ' + (x.status === 'answered' ? 'ok' : '') + '">' + esc(x.status || 'open') + '</span> ';
     if (tab === 'conflicts') tags += '<span class="tag ' + ((x.status || 'open') === 'open' ? 'bad' : 'ok') + '">' + esc(x.status || 'open') + '</span> ';
+    tags += editTag(x);
     var body = '<div class="' + (x.superseded ? 'sup' : '') + '">' + esc(x.text || x.title) + '</div>';
     if (x.words) body += '<div class="words">“' + esc(x.words) + '”</div>';
     if (tab === 'conflicts' && x.other) body += '<div class="small dim">vs. ' + esc(x.other) + '</div>';
     if (x.answer) body += '<div class="small">Answer: ' + esc(x.answer) + '</div>';
+    body += editBlock(x);
     var meta = (tab === 'progress' && x.status === 'done' ? 'done ' + esc(x.doneOn || x.said || '?') : 'said ' + esc(x.said || '?')) + (x.chat ? ' · ' + esc(x.chat) : '') + (x.base || x.url ? ' · ' + linkOrText(x.base || x.url) : '');
     var acts = '';
     if (!x.locked) {
@@ -1038,7 +1057,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
 
   V.waiting = function () {
     var open = S.waiting.filter(function (w) { return !w.done && !w.archived; }), done = S.waiting.filter(function (w) { return w.done && !w.archived; });
-    var row = function (w) { var t = topicById(w.topic); return '<li class="item"><input type="checkbox" class="check" data-act="toggle-wait" data-v="' + esc(w.id) + '"' + (w.done ? ' checked' : '') + ' aria-label="Done" style="width:20px;height:20px;accent-color:var(--v2);margin-top:2px"><div class="body"><div class="' + (w.done ? 'sup' : '') + '">' + esc(w.text) + '</div><div class="meta">' + (t ? '<a href="#topic/' + esc(t.id) + '">' + esc(t.name) + '</a> · ' : '') + 'said ' + esc(w.said || '') + (w.base ? ' · ' + linkOrText(w.base) : '') + '</div></div><button class="icon-btn" data-act="archive-wait" data-v="' + esc(w.id) + '" aria-label="Archive">×</button></li>'; };
+    var row = function (w) { var t = topicById(w.topic); return '<li class="item"><input type="checkbox" class="check" data-act="toggle-wait" data-v="' + esc(w.id) + '"' + (w.done ? ' checked' : '') + ' aria-label="Done" style="width:20px;height:20px;accent-color:var(--v2);margin-top:2px"><div class="body">' + editTag(w) + '<div class="' + (w.done ? 'sup' : '') + '">' + esc(w.text) + '</div>' + editBlock(w) + '<div class="meta">' + (t ? '<a href="#topic/' + esc(t.id) + '">' + esc(t.name) + '</a> · ' : '') + 'said ' + esc(w.said || '') + (w.base ? ' · ' + linkOrText(w.base) : '') + '</div></div><button class="icon-btn" data-act="archive-wait" data-v="' + esc(w.id) + '" aria-label="Archive">×</button></li>'; };
     var h = top() + '<div class="wrap"><div class="row between"><h1>Waiting on you</h1><button class="btn primary" data-act="add-wait">Add</button></div><p class="dim">Calls and tasks only you can do. Every card should point somewhere.</p>';
     h += '<div class="card">' + (open.length ? '<ul class="list">' + open.map(row).join('') + '</ul>' : '<div class="empty">All clear.</div>') + '</div>';
     if (done.length) h += '<details class="ch" style="margin-top:12px"><summary>Done (' + done.length + ')</summary><ul class="list">' + done.map(row).join('') + '</ul></details>';
@@ -1050,7 +1069,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     var h = top() + '<div class="wrap"><div class="row between"><h1>Vault</h1><button class="btn primary" data-act="add-asset">Add</button></div><p class="dim">Your files, renders and docs: what they are, where they live, when they came up. polaris keeps the pointer, not the file.</p>' +
       '<div class="seg" style="margin-bottom:12px">' + ['all', 'unreviewed', 'approved'].map(function (s) { return '<button data-act="vault-filter" data-v="' + s + '" class="' + (f === s ? 'on' : '') + '">' + s + '</button>'; }).join('') + '</div>';
     if (!items.length) return h + '<div class="card empty">Nothing here yet.</div></div>';
-    h += '<div class="card"><ul class="list">' + items.map(function (v) { var t = topicById(v.topic); return '<li class="item"><div class="body"><b>' + linkOrText(v.base, v.title) + '</b> <span class="tag ' + (v.status === 'approved' ? 'ok' : 'warn') + '">' + esc(v.status) + '</span><div class="meta">' + esc(v.file || '') + (t ? ' · ' + esc(t.name) : '') + ' · said ' + esc(v.said || '') + '</div><div class="actions" style="margin-top:6px"><button class="btn sm ghost" data-act="asset-status" data-v="' + esc(v.id) + '">' + (v.status === 'approved' ? 'Mark unreviewed' : 'Approve') + '</button><button class="btn sm ghost" data-act="archive-asset" data-v="' + esc(v.id) + '">Archive</button></div></div></li>'; }).join('') + '</ul></div>';
+    h += '<div class="card"><ul class="list">' + items.map(function (v) { var t = topicById(v.topic); return '<li class="item"><div class="body"><b>' + linkOrText(v.base, v.title) + '</b> <span class="tag ' + (v.status === 'approved' ? 'ok' : 'warn') + '">' + esc(v.status) + '</span> ' + editTag(v) + editBlock(v) + '<div class="meta">' + esc(v.file || '') + (t ? ' · ' + esc(t.name) : '') + ' · said ' + esc(v.said || '') + '</div><div class="actions" style="margin-top:6px"><button class="btn sm ghost" data-act="asset-status" data-v="' + esc(v.id) + '">' + (v.status === 'approved' ? 'Mark unreviewed' : 'Approve') + '</button><button class="btn sm ghost" data-act="archive-asset" data-v="' + esc(v.id) + '">Archive</button></div></div></li>'; }).join('') + '</ul></div>';
     return h + '</div>';
   };
 
@@ -1059,7 +1078,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     var h = top() + '<div class="wrap"><div class="row between"><h1>Log</h1><button class="btn primary" data-act="add-log">Add</button></div><p class="dim">Two kinds of rows. Ledger: a complaint, correction or good idea, with the fix and its status, so nothing gets lost when a chat runs long. Call: a decision an AI made without asking you, what it chose, and what changed.</p>' +
       '<div class="seg" style="margin-bottom:12px">' + [['all', 'All'], ['ledger', 'Ledger'], ['call', 'Calls']].map(function (s) { return '<button data-act="log-filter" data-v="' + s[0] + '" class="' + (f === s[0] ? 'on' : '') + '">' + s[1] + '</button>'; }).join('') + '</div>';
     if (!items.length) return h + '<div class="card empty">Nothing logged yet.</div></div>';
-    h += '<div class="card"><ul class="list">' + items.map(function (l) { return '<li class="item"><div class="body"><span class="tag">' + esc(l.type) + '</span> <span class="tag ' + (l.status === 'done' ? 'ok' : 'warn') + '">' + esc(l.status || 'open') + '</span><div style="margin-top:4px">' + esc(l.text) + '</div>' + (l.fix ? '<div class="small dim">Fix: ' + esc(l.fix) + '</div>' : '') + '<div class="meta">said ' + esc(l.said || '') + '</div><div class="actions" style="margin-top:6px"><button class="btn sm ghost" data-act="log-done" data-v="' + esc(l.id) + '">' + (l.status === 'done' ? 'Reopen' : 'Mark done') + '</button></div></div></li>'; }).join('') + '</ul></div>';
+    h += '<div class="card"><ul class="list">' + items.map(function (l) { return '<li class="item"><div class="body"><span class="tag">' + esc(l.type) + '</span> <span class="tag ' + (l.status === 'done' ? 'ok' : 'warn') + '">' + esc(l.status || 'open') + '</span> ' + editTag(l) + editBlock(l) + '<div style="margin-top:4px">' + esc(l.text) + '</div>' + (l.fix ? '<div class="small dim">Fix: ' + esc(l.fix) + '</div>' : '') + '<div class="meta">said ' + esc(l.said || '') + '</div><div class="actions" style="margin-top:6px"><button class="btn sm ghost" data-act="log-done" data-v="' + esc(l.id) + '">' + (l.status === 'done' ? 'Reopen' : 'Mark done') + '</button></div></div></li>'; }).join('') + '</ul></div>';
     return h + '</div>';
   };
 
@@ -1381,9 +1400,10 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
       return '<div class="card" id="feed-card"><h2>Feed from my repos</h2><p class="small dim">Pulls your polaris feed from a private repo you own, read only. Make a fine-grained token for that one repo with Contents set to Read-only. It stays on this device only: it is never synced and never goes into a backup or export. polaris checks on open and every 30 minutes while it is open, and never writes to GitHub with it.</p>' +
         '<div class="row"><div style="flex:1;min-width:180px"><label for="fd-repo">Owner / repo</label><input type="text" id="fd-repo" value="' + esc(fc.slug) + '" autocapitalize="off" spellcheck="false"></div><div style="flex:1;min-width:180px"><label for="fd-path">Path</label><input type="text" id="fd-path" value="' + esc(fc.path) + '" autocapitalize="off" spellcheck="false"></div></div>' +
         '<label for="fd-token">Read-only token ' + (ft ? '(saved on this device)' : '') + '</label><input type="password" id="fd-token" placeholder="' + (ft ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022  leave blank to keep' : 'github_pat_\u2026') + '" autocomplete="off">' +
-        '<div class="row" style="margin-top:12px"><button class="btn primary" data-act="feed-save">Save and pull now</button><button class="btn" data-act="feed-pull">Pull now</button>' + (ft ? '<button class="btn danger" data-act="feed-forget">Forget token</button>' : '') + '</div>' +
+        '<div class="row" style="margin-top:12px"><button class="btn primary" data-act="feed-save">Save and pull now</button><button class="btn" data-act="feed-pull">Pull now</button>' + (ft ? '<button class="btn danger" data-act="feed-forget">Forget token</button>' : '') + (fc.held ? '<button class="btn primary" data-act="feed-apply">Apply ' + fc.held.n + ' removals</button>' : '') + '</div>' +
         '<p class="small dim" id="feed-status" style="margin-top:10px">' + feedStatus() + '</p></div>';
     })();
+    h += dropCard();
     h += syncCard();
     h += '<div class="card"><h2>Switch devices</h2><p class="small dim">Your phone is your polaris; your computer is where Claude works. To bring everything over to another device: tap <b>Copy my polaris</b> here, then on the other device tap <b>Paste from my other device</b>. On an iPhone and Mac with the same Apple ID, what you copy on one pastes on the other. Nothing is overwritten: both sides are merged. Want it to happen by itself? Turn on <a href="#guide">GitHub sync</a> (Guide, Keep your phone and computer in sync).</p><div class="row"><button class="btn primary" data-act="move-copy">Copy my polaris</button><button class="btn" data-act="move-paste">Paste from my other device</button></div></div>';
     h += '<div class="card"><h2>Backup and export</h2><div class="row"><button class="btn primary" data-act="export-json">Export backup (.json)</button><button class="btn" data-act="export-md">Export Markdown (.zip)</button><label class="btn" style="margin:0;color:var(--ink)">Import backup<input type="file" id="imp" accept=".json,application/json" hidden></label></div><p class="small dim">Import merges into what you have. Nothing here is overwritten without asking.</p></div>';
@@ -1586,7 +1606,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     });
   }
   // Sealed payloads: AES-GCM over either plain JSON (older copies, first byte "{") or MAGIC + gzip(JSON) (bigger records).
-  var MAGIC = [80, 90, 49, 58];  // "PZ1:"
+  var MAGIC = [80, 90, 49, 58], GZIP_OVER = 1536 * 1024;  // "PZ1:"
   function gzipOk() { return typeof CompressionStream === 'function' && typeof DecompressionStream === 'function'; }
   function pipe(bytes, stream) {
     var w = stream.writable.getWriter();
@@ -1595,13 +1615,14 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
   }
   function pack(obj) {
     var raw = enc.encode(JSON.stringify(obj));
-    if (!gzipOk() || raw.length < 4096) return Promise.resolve(raw);
+    // gzip only a record too big to travel plain: devices on an older polaris cannot read a gzip-marked copy (they fail with "Unexpected token 'P'"), so a normal-size record stays plain JSON
+    if (!gzipOk() || raw.length < GZIP_OVER) return Promise.resolve(raw);
     return pipe(raw, new CompressionStream('gzip')).then(function (gz) { var out = new Uint8Array(MAGIC.length + gz.length); out.set(MAGIC, 0); out.set(gz, MAGIC.length); return out; }, function () { return raw; });
   }
   function unpack(pt) {
     var b = new Uint8Array(pt), zipped = MAGIC.every(function (m, i) { return b[i] === m; });
     if (!zipped) return Promise.resolve(JSON.parse(dec.decode(b)));
-    if (!gzipOk()) throw new Error('This browser is too old to open the synced copy. Update it, or use another browser.');
+    if (!gzipOk()) { var ue = new Error('This device is too old to open the synced copy yet. Update iOS (Settings, General, Software Update), or your browser, then open polaris again. Nothing is lost.'); ue.needUpdate = true; throw ue; }
     return pipe(b.subarray(MAGIC.length), new DecompressionStream('gzip')).then(function (raw) { return JSON.parse(dec.decode(raw)); });
   }
   function seal(v, rev, obj) {
@@ -1617,9 +1638,18 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     return fetch('/api/vault?id=' + v.id + (qs || ''), { method: method, cache: 'no-store', headers: Object.assign({ Authorization: 'Bearer ' + v.token }, body ? { 'Content-Type': 'application/json' } : {}), body: body ? JSON.stringify(body) : undefined })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { j.status = r.status; return j; }); });
   }
-  var vaultP = null;
+  var vaultP = null, updToasted = false;
   function vault() { var c = pairStore(); if (!c) return Promise.resolve(null); if (!vaultP) vaultP = readCode(c).then(derive); return vaultP; }
   function snapshot() { Store.snap({ at: C.now(), state: S }); }
+  // What goes into the encrypted device-sync payload: his own items and his edits. Feed items that he has not edited
+  // stay out: every device pulls the feed itself, so carrying 4,700 of them would only fill the 4 MiB cap.
+  function keepSync(x) { return !(x && x.src === 'feed' && !x.edit); }
+  function syncView(st) {
+    var o = {}; Object.keys(st).forEach(function (k) { o[k] = st[k]; });
+    o.topics = (st.topics || []).map(function (t) { var c = {}; Object.keys(t).forEach(function (k) { c[k] = t[k]; }); LISTS.forEach(function (l) { if (Array.isArray(t[l])) c[l] = t[l].filter(keepSync); }); return c; });
+    FLISTS.forEach(function (k) { if (Array.isArray(st[k])) o[k] = st[k].filter(keepSync); });
+    return o;
+  }
   // pull, merge, push; on a stale write, go round again
   var epoch = 0;  // bumped by reset and pair-off, so a sync already in flight cannot write old data back
   function pairSync(quiet, tries) {
@@ -1634,7 +1664,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
       var P = S.settings.pair || (S.settings.pair = {});
       return api(v, 'GET', '&since=' + (P.rev || '')).then(function (g) {
         if (g.status === 404) {
-          if (P.synced) return seal(v, 1, S).then(function (box) { alive(); return api(v, 'POST', '', box); }).then(function (r) { alive(); if (r.status !== 201) throw new Error('Could not sync just now. Your changes are saved here and will sync later.'); { P.rev = 1; P.at = C.now(); S.meta.dirty = false; Store.save(S); } });
+          if (P.synced) return seal(v, 1, syncView(S)).then(function (box) { alive(); return api(v, 'POST', '', box); }).then(function (r) { alive(); if (r.status !== 201) throw new Error('Could not sync just now. Your changes are saved here and will sync later.'); { P.rev = 1; P.at = C.now(); S.meta.dirty = false; Store.save(S); } });
           throw new Error('No synced copy yet. Open polaris on your other device first, so it can finish turning sync on.');
         }
         if (g.status === 401) throw new Error('That code does not match. Copy it again from your other device.');
@@ -1644,7 +1674,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
           alive();
           if (C.validate(theirs).length) throw new Error('The synced copy is not a polaris file.');
           theirsPrint = C.fingerprint(theirs);
-          var first = !P.synced, m = C.merge(S, theirs, P.synced ? (P.at || '') : ''); S = m.state; S.settings.pair = P;
+          var first = !P.synced, m = C.merge(S, theirs, P.synced ? (P.at || '') : ''); S = m.state; S.settings.pair = P; applyRemovedKnown();
           if (first) {  // restore onto this device: keep what is here, fill in what is missing
             if (!S.profile.name && theirs.profile && theirs.profile.name) S.profile.name = theirs.profile.name;
             if (!S.settings.setupDone && S.topics.length) { S.settings.setupDone = true; if (!S.settings.setupAt) S.settings.setupAt = C.now(); }
@@ -1654,10 +1684,10 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
         return step.then(function (clashes) {
           alive();
           var pulled = !g.unchanged, remoteRev = g.rev;
-          var mustPush = S.meta.dirty || (pulled && C.fingerprint(S) !== theirsPrint);
+          var mustPush = S.meta.dirty || (pulled && C.fingerprint(syncView(S)) !== theirsPrint);
           var finish = function (rev) { P.rev = rev; P.at = C.now(); P.synced = true; S.meta.dirty = false; S.meta.lastSync = P.at; Store.save(S); render(); if (!Store.ok) throw new Error('This device is out of room'); if (clashes) toast('Synced. ' + clashes + ' clash' + (clashes > 1 ? 'es' : '') + ' held in your Inbox.', 4000); else if (!quiet) toast('Synced'); };
           if (!mustPush) { if (pulled) return finish(remoteRev); P.rev = remoteRev; P.at = C.now(); return; }  // nothing new to send: never write back what we just pulled
-          return seal(v, remoteRev + 1, S).then(function (box) { box.expectedRev = remoteRev; return api(v, 'PUT', '', box); }).then(function (r) {
+          return seal(v, remoteRev + 1, syncView(S)).then(function (box) { box.expectedRev = remoteRev; return api(v, 'PUT', '', box); }).then(function (r) {
             alive();
             if (r.status === 200) return finish(r.rev);
             if (r.status === 409 && tries < 3) { syncing = false; return pairSync(quiet, tries + 1); }
@@ -1665,14 +1695,14 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
           });
         });
       });
-    }).then(function (x) { if (ran) syncOk(); return x; }, function (e) { if (e.stopped) throw e; syncFail(plainErr(e)); if (route.name === 'settings') render(); if (!quiet) toast(e.message, 5000); throw e; }).then(done, function (e) { done(); if (!quiet) return; });
+    }).then(function (x) { if (ran) syncOk(); return x; }, function (e) { if (e.stopped) throw e; if (e.needUpdate) syncUpdate(); else syncFail(plainErr(e)); if (route.name === 'settings') render(); else paintAlerts(); if (!quiet || (e.needUpdate && !updToasted)) { toast(e.message, 7000); if (e.needUpdate) updToasted = true; } throw e; }).then(done, function (e) { done(); if (!quiet) return; });
   }
   function pairStart() {
     if (!cryptoOk()) return toast('This browser cannot do encrypted sync. Open polaris from its icon or in Safari or Chrome.', 5000);
     var secret = crypto.getRandomValues(new Uint8Array(32));
     return makeCode(secret).then(function (code) {
       return derive(secret).then(function (v) {
-        return seal(v, 1, S).then(function (box) { return api(v, 'POST', '', box); }).then(function (r) {
+        return seal(v, 1, syncView(S)).then(function (box) { return api(v, 'POST', '', box); }).then(function (r) {
           if (r.status !== 201) throw new Error(r.status === 503 ? 'Sync is not reachable right now. Try again in a minute.' : 'Could not turn on sync. Try again.');
           pairStore(code); vaultP = Promise.resolve(v);
           S.settings.dataMode = 'pair'; S.settings.pair = { rev: 1, at: C.now(), synced: true }; S.meta.dirty = false; Store.save(S);
@@ -1703,7 +1733,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
   // Erase this device: the record, the GitHub token, the pair code, the recovery check and every sync marker
   function eraseDevice() {
     epoch++; clearTimeout(autoT); vaultP = null; ui.pairShow = false; ui.pairJoin = false; ui.recCheck = false;
-    [TOKEN_KEY, PAIR_KEY, REC_KEY, SYNC_KEY, FEED_TOKEN_KEY, FEED_KEY].forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
+    [TOKEN_KEY, PAIR_KEY, REC_KEY, SYNC_KEY, FEED_TOKEN_KEY, FEED_KEY, DROP_TOKEN_KEY, DROP_KEY, DROP_Q_KEY].forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
     Store.wipe(); Store.unreadable = false; S = C.emptyState(); Store.save(S);
   }
   function gh(path, opts) {
@@ -1753,12 +1783,156 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
   // ---------- one merge path for Import backup and the repo feed ----------
   // A topic you already have under the same name keeps its own record, so homes never double up; items that point at a
   // topic by id follow it to the topic's id here. Then the normal merge (newer wins, a real clash is held in the Inbox).
-  function mergeIncoming(j, since) {
+  function remapTopics(j) {
     var have = {}; live(S.topics).forEach(function (t) { have[C.slug(t.name)] = t.id; });
     var remap = {};
     (j.topics || []).forEach(function (t) { var id = have[C.slug(t.name)]; if (id && id !== t.id) { remap[t.id] = id; t.id = id; } });
     ['waiting', 'vault', 'log', 'reviews'].forEach(function (k) { (j[k] || []).forEach(function (x) { if (x && x.topic && remap[x.topic]) x.topic = remap[x.topic]; }); });
+  }
+  function mergeIncoming(j, since) {
+    remapTopics(j);
     var m = C.merge(S, j, since || ''); S = m.state; return m;
+  }
+
+  // ---------- feed items are feed-owned; his edits to them are his ----------
+  var LISTS = ['start', 'decisions', 'ideas', 'conflicts', 'questions', 'sources', 'progress'], FLISTS = ['waiting', 'vault', 'log'];
+  // the fields a person can change on a line; two lines with the same pick say the same thing
+  var EF = ['text', 'title', 'words', 'other', 'answer', 'answered', 'status', 'who', 'said', 'chat', 'base', 'file', 'type', 'fix', 'resolution', 'doneOn', 'done', 'superseded', 'locked', 'archived', 'pinned', 'notes'];
+  function pickF(x) { var o = {}; EF.forEach(function (k) { var v = x[k]; if (v !== undefined && v !== null && v !== '' && v !== false) o[k] = v; }); return o; }
+  function sameF(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+  function sig(x) { var o = {}; Object.keys(x).sort().forEach(function (k) { if (k !== 'updated' && k !== 'src' && k !== 'edit') o[k] = x[k]; }); return JSON.stringify(o); }
+  function findAny(id) {
+    var hit = null;
+    S.topics.forEach(function (t) { LISTS.forEach(function (l) { (t[l] || []).forEach(function (x) { if (x.id === id) hit = { x: x, arr: t[l], list: l, t: t }; }); }); });
+    FLISTS.forEach(function (k) { (S[k] || []).forEach(function (x) { if (x.id === id) hit = { x: x, arr: S[k], list: k, t: x.topic ? topicById(x.topic) : null }; }); });
+    return hit;
+  }
+  function feedIndex() {
+    var idx = {};
+    S.topics.forEach(function (t) { LISTS.forEach(function (l) { (t[l] || []).forEach(function (x) { idx[x.id] = { x: x, arr: t[l], list: l, t: t }; }); }); });
+    FLISTS.forEach(function (k) { (S[k] || []).forEach(function (x) { idx[x.id] = { x: x, arr: S[k], list: k, t: null }; }); });
+    return idx;
+  }
+  function editTexts(o) { return String(o.text || o.title || ''); }
+  // queue what he changed on a feed item: old text, new text, the item id and the time
+  function queueEdit(x, before, after, list, t) {
+    var oldD = {}, newD = {};
+    EF.forEach(function (k) { if (JSON.stringify(before[k]) !== JSON.stringify(after[k])) { if (k in before) oldD[k] = before[k]; if (k in after) newD[k] = after[k]; } });
+    dropAdd({ type: 'edit', item_id: x.id, list: list, topic: t ? { id: t.id, name: t.name } : null, old_text: editTexts(before), new_text: editTexts(after), old: oldD, 'new': newD });
+  }
+  // run an edit on one line; if it is a feed line, keep his version, mark it "edited here" and queue it
+  function tracked(x, list, t, fn) {
+    var b = x && x.src === 'feed' ? pickF(x) : null, r = fn();
+    if (b) {
+      var a = pickF(x); if (sameF(a, b)) return r;
+      if (!x.edit) x.edit = { base: b, at: C.now(), feedNew: null };
+      x.edit.at = C.now();
+      queueEdit(x, b, a, list, t);
+      if (sameF(a, x.edit.base) && !x.edit.feedNew && !x.edit.removed) delete x.edit;  // changed back to the feed's own words
+    }
+    return r;
+  }
+  // the feed spoke about a line he edited: keep his, never overwrite, show both
+  function feedAgainstEdit(x, f, res) {
+    var e = x.edit, fp = pickF(f), cur = pickF(x);
+    if (sameF(fp, cur)) { delete x.edit; x.src = 'feed'; res.marked++; return; }  // the feed caught up: his edit was filed
+    if (sameF(fp, e.base)) { if (e.feedNew) { e.feedNew = null; res.marked++; } return; }  // the feed has not moved since he edited
+    if (!e.feedNew || !sameF(e.feedNew, fp)) { e.feedNew = fp; e.feedAt = f.updated || ''; res.held++; }
+    if (e.removed) e.removed = false;
+  }
+  // The feed merge. Lines from the feed are feed-owned: the feed wins on them. His own captures are never touched.
+  // A feed line he edited keeps his version (marked, queued); the feed's newer version is kept beside it until it is filed.
+  // Retiring old ids: a removed id is dropped only if the line is the feed's (never one he added: those carry a device marker;
+  // never one he touched by hand, which is kept). If he touched it (ticked it done, pinned it, noted it) and a new line with
+  // the same words sits in the same topic, his marks move to the new line in the same step. The whole pull runs on a copy and
+  // swaps in at the end, so counts never dip. If one pull would retire more than a quarter of the feed's lines it is held.
+  var CARRY = ['done', 'doneOn', 'pinned', 'notes', 'answer', 'answered', 'resolution', 'superseded', 'locked', 'archived'];
+  function normText(x) { return String(x.text || x.title || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
+  function touchedByHand(x) { return !!(x.edit || (x.updated || '') > (x.created || '')); }
+  function feedIncoming(j, opts) {
+    opts = opts || {};
+    remapTopics(j);
+    delete j.inbox; delete j.reviews;  // the feed never writes into his Inbox or reviews
+    var removed = {}; (Array.isArray(j.removed) ? j.removed : []).forEach(function (id) { if (typeof id === 'string' && id) removed[id] = 1; });
+    var res = { added: 0, changed: 0, removed: 0, held: 0, marked: 0, clashes: 0, carried: 0, kept: 0 };
+    // new lines by topic + words, for carrying his marks over
+    var idx0 = feedIndex(), fresh = {};
+    function key(list, tid, x) { return list + '|' + tid + '|' + normText(x); }
+    (j.topics || []).forEach(function (t) { LISTS.forEach(function (l) { (t[l] || []).forEach(function (f) { if (f && f.id && !idx0[f.id] && !removed[f.id]) (fresh[key(l, t.id, f)] = fresh[key(l, t.id, f)] || []).push(f); }); }); });
+    FLISTS.forEach(function (k) { (j[k] || []).forEach(function (f) { if (f && f.id && !idx0[f.id] && !removed[f.id]) (fresh[key(k, f.topic || '', f)] = fresh[key(k, f.topic || '', f)] || []).push(f); }); });
+    // plan: what would be dropped, carried, kept (no change yet)
+    var plan = { drop: [], carry: [], keep: [], flag: [] }, eligible = 0;
+    Object.keys(idx0).forEach(function (id) { if (!idx0[id].x.dev) eligible++; });
+    Object.keys(removed).forEach(function (id) {
+      var L = idx0[id]; if (!L) return;
+      if (L.x.dev) return;  // his own capture: never
+      if (L.x.edit) { plan.flag.push(L); return; }
+      if (!touchedByHand(L.x)) { plan.drop.push(L); return; }
+      var tid = L.t ? L.t.id : (L.x.topic || ''), f = (fresh[key(L.list, tid, L.x)] || []).shift();  // same words twice in one topic: matched in order
+      if (f) plan.carry.push({ L: L, f: f }); else plan.keep.push(L);
+    });
+    var nDrop = plan.drop.length + plan.carry.length;
+    if (!opts.allowMass && nDrop >= 10 && nDrop > 0.25 * eligible) return { held: { n: nDrop, of: eligible } };
+    // apply, all on a copy, swapped in only if it all went through
+    var keepS = S;
+    try {
+      S = JSON.parse(JSON.stringify(S));
+      var idx = feedIndex(), sidx = {}; Object.keys(idx).forEach(function (id) { sidx[id] = idx[id]; });
+      plan.flag.forEach(function (P0) { var L = sidx[P0.x.id]; if (L && !L.x.edit.removed) { L.x.edit.removed = true; res.held++; } });
+      plan.keep.forEach(function (P0) { var L = sidx[P0.x.id]; if (L) { L.x.dev = L.x.dev || deviceId(); res.kept++; } });  // his, by hand: now plainly his own
+      plan.carry.forEach(function (c) {
+        var f = c.f, o = c.L.x, base = pickF(f), moved = false;
+        CARRY.forEach(function (k) { if (o[k] !== undefined && o[k] !== null && o[k] !== '' && o[k] !== false && JSON.stringify(o[k]) !== JSON.stringify(f[k])) { f[k] = o[k]; moved = true; } });
+        if (moved) { f.src = 'feed'; f.edit = { base: base, at: C.now(), feedNew: null }; queueEdit(f, base, pickF(f), c.L.list, c.L.t); res.carried++; }
+      });
+      plan.carry.concat(plan.drop.map(function (L) { return { L: L }; })).forEach(function (c) {
+        var L = sidx[c.L.x.id]; if (!L) return; var i = L.arr.indexOf(L.x); if (i >= 0) { L.arr.splice(i, 1); res.removed++; }
+      });
+      idx = feedIndex();
+      function handle(arr) {
+        var keep = [];
+        (arr || []).forEach(function (f) {
+          if (!f || typeof f !== 'object' || !f.id || removed[f.id]) return;
+          var L = idx[f.id], hadEdit = !!f.edit;
+          if (!L) { f.src = 'feed'; keep.push(f); res.added++; return; }
+          var x = L.x; f.src = 'feed';
+          if (x.edit) { feedAgainstEdit(x, f, res); return; }
+          if (x.dev) return;  // his own capture, even with a feed id: never touched
+          if (x.src === 'feed') { if (sig(x) !== sig(f)) { L.arr[L.arr.indexOf(x)] = f; L.x = f; res.changed++; } return; }
+          // a copy from before lines were marked (an earlier file import): same words, it is the feed's now
+          if (sig(x) === sig(f)) { x.src = 'feed'; res.marked++; return; }
+          if ((x.updated || '') > (f.updated || '')) {  // he changed it here before this update: his edit stands and is queued
+            x.src = 'feed'; x.edit = { base: pickF(f), at: x.updated || C.now(), feedNew: null };
+            queueEdit(x, pickF(f), pickF(x), L.list, L.t); res.held++; return;
+          }
+          L.arr[L.arr.indexOf(x)] = f; L.x = f; res.changed++;
+        });
+        return keep;
+      }
+      (j.topics || []).forEach(function (t) { LISTS.forEach(function (l) { if (Array.isArray(t[l])) t[l] = handle(t[l]); }); });
+      FLISTS.forEach(function (k) { if (Array.isArray(j[k])) j[k] = handle(j[k]); });
+      var m = C.merge(S, j, ''); S = m.state; res.clashes = m.clashes;
+    } catch (e) { S = keepS; throw e; }
+    return { res: res, removedIds: Object.keys(removed) };
+  }
+  // after a device sync, a line the feed has removed must not come back from an older copy
+  function applyRemovedKnown() {
+    var rm = feedCfg().removed; if (!rm || !rm.length) return 0;
+    var set = {}, n = 0; rm.forEach(function (id) { set[id] = 1; });
+    function f(arr) { if (!Array.isArray(arr)) return arr; var out = arr.filter(function (x) { return !(set[x.id] && !x.dev && !x.edit); }); n += arr.length - out.length; return out; }
+    S.topics.forEach(function (t) { LISTS.forEach(function (l) { t[l] = f(t[l]); }); });
+    FLISTS.forEach(function (k) { S[k] = f(S[k]); });
+    return n;
+  }
+  // chip, line and button helpers for lines he edited
+  function dropQueued(id) { return dropQ().some(function (e) { return e.item_id === id; }); }
+  function editTag(x) { return x.edit ? '<span class="tag edited">edited here</span> ' : ''; }
+  function editBlock(x) {
+    if (!x.edit) return '';
+    var e = x.edit, h = '<div class="feedboth small">' + (dropQueued(x.id) ? 'Waiting to send to your drop repo.' : 'Sent to your drop repo.');
+    if (e.feedNew && !sameF(e.feedNew, pickF(x))) h += '<div class="theirs"><b>The feed now says:</b> ' + esc(editTexts(e.feedNew)) + (e.feedNew.words ? ' <span class="dim">“' + esc(e.feedNew.words) + '”</span>' : '') + '</div><div class="dim">Both stay until your edit is filed.</div><button class="btn sm ghost" data-act="edit-take-feed" data-v="' + esc(x.id) + '">Use the feed\'s</button>';
+    if (e.removed) h += '<div class="theirs">The feed has removed this line. Yours stays until your edit is filed.</div><button class="btn sm ghost" data-act="edit-drop-removed" data-v="' + esc(x.id) + '">Remove it</button>';
+    return h + '</div>';
   }
 
   // ---------- feed from my repos (pull only) ----------
@@ -1771,7 +1945,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
   }
   function feedCfg() {
     var o = {}; try { o = JSON.parse(localStorage.getItem(FEED_KEY) || '{}') || {}; } catch (e) {}
-    return Object.assign({ slug: 'argorodrigo/polaris-personal', path: 'feed/polaris-feed.json', etag: '', lastPull: '', lastChange: '', lastNote: '', errAt: '', errMsg: '' }, o);
+    return Object.assign({ slug: 'argorodrigo/polaris-personal', path: 'feed/polaris-feed.json', etag: '', lastPull: '', lastChange: '', lastNote: '', errAt: '', errMsg: '', generatedAt: '', removed: [], held: null }, o);
   }
   function putFeedCfg(o) { try { localStorage.setItem(FEED_KEY, JSON.stringify(o)); } catch (e) {} }
   function feedStatus() {
@@ -1779,6 +1953,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     if (c.errAt && (!c.lastPull || c.errAt > c.lastPull)) h += '<span class="tag warn">Feed error</span> ' + esc(c.errMsg || 'Something went wrong') + ' (' + esc(fmtAt(c.errAt)) + '). ';
     h += c.lastPull ? 'Feed: last pulled ' + esc(fmtAt(c.lastPull)) + '.' : 'Feed: not pulled yet.';
     if (c.lastNote) h += ' ' + esc(c.lastNote);
+    if (c.held) h += ' <span class="tag warn">Held</span> The feed wants to retire ' + c.held.n + ' of your ' + c.held.of + ' feed lines (old ids). Nothing was changed. Tap Apply to retire them and add the new ones in one step; any line you ticked, pinned or edited moves to its new line.';
     return h;
   }
   function paintFeed() { var el = document.getElementById('feed-status'); if (el) el.innerHTML = feedStatus(); }
@@ -1798,11 +1973,11 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     ['waiting', 'vault'].forEach(function (k) { (st[k] || []).forEach(function (x) { d[k + x.id] = x.updated || ''; }); });
     return d;
   }
-  function feedPull(manual) {
+  function feedPull(manual, allowMass) {
     var tok = feedToken(); if (feeding) return Promise.resolve();
     if (!tok) { if (manual) toast('Add a read-only token first'); return Promise.resolve(); }
     var c = feedCfg(), mm = /^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)$/.exec(String(c.slug || '').trim()), gen = epoch;
-    function fail(msg) { var o = feedCfg(); o.errAt = C.now(); o.errMsg = msg; putFeedCfg(o); paintFeed(); if (manual) toast('Feed: ' + msg, 5000); }
+    function fail(msg) { var o = feedCfg(); o.errAt = C.now(); o.errMsg = msg; putFeedCfg(o); paintFeed(); paintAlerts(); if (manual) toast('Feed: ' + msg, 5000); }
     if (!mm) { fail('Use owner/repo, like argorodrigo/polaris-personal'); return Promise.resolve(); }
     if (!navigator.onLine) { fail('You are offline, it will try again'); return Promise.resolve(); }
     var url = 'https://api.github.com/repos/' + encodeURIComponent(mm[1]) + '/' + encodeURIComponent(mm[2]) + '/contents/' + String(c.path || 'feed/polaris-feed.json').replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/');
@@ -1816,22 +1991,170 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     }).then(function (res) {
       if (gen !== epoch) return;
       var o = feedCfg(), now = C.now(), since = o.lastPull || '';
-      if (res.same) { o.lastPull = now; o.errAt = ''; o.errMsg = ''; putFeedCfg(o); paintFeed(); if (manual) toast('Feed: nothing new'); return; }
+      if (res.same) { o.lastPull = now; o.errAt = ''; o.errMsg = ''; putFeedCfg(o); paintFeed(); paintAlerts(); if (manual) toast('Feed: nothing new'); return; }
       var j; try { j = JSON.parse(res.txt); } catch (x) { var e1 = new Error('not json'); e1.notFeed = true; throw e1; }
       var errs = C.validate(j); if (errs.length || !Array.isArray(j.topics)) { var e2 = new Error(errs[0] || 'not a feed'); e2.notFeed = true; throw e2; }
-      var before = itemStamps(S), m = mergeIncoming(j, since), after = itemStamps(S), added = 0, changed = 0;
-      Object.keys(after).forEach(function (k) { if (!(k in before)) added++; else if (before[k] !== after[k]) changed++; });
-      if (added || changed || m.clashes) save();
+      var fm = feedIncoming(j, { allowMass: !!allowMass });
+      if (fm.held) {  // too many retirements in one pull: nothing is applied, he is asked
+        o.lastPull = now; o.errAt = ''; o.errMsg = ''; o.held = { n: fm.held.n, of: fm.held.of, at: now }; o.etag = '';
+        if (j.generated_at) o.generatedAt = String(j.generated_at);
+        putFeedCfg(o); if (route.name === 'settings' && !document.getElementById('scrim') && !/^(input|textarea|select)$/i.test((document.activeElement || {}).tagName || '')) render(); else paintFeed(); paintAlerts(); if (manual) toast('Feed: ' + fm.held.n + ' old lines are due to be retired. Nothing changed. See Settings.', 6000);
+        return;
+      }
+      o.held = null;
+      var m = fm.res, added = m.added, changed = m.changed + m.removed;
+      if (added || changed || m.clashes || m.held || m.marked) save();
       o.etag = res.etag; o.lastPull = now; o.errAt = ''; o.errMsg = '';
+      if (j.generated_at) o.generatedAt = String(j.generated_at); o.heads = j.source_heads || o.heads || null;
+      if (fm.removedIds.length) { var seen = {}; o.removed = (o.removed || []).concat(fm.removedIds).filter(function (id) { return seen[id] ? false : (seen[id] = 1); }).slice(-5000); }
       if (added || changed) { o.lastChange = now; o.lastNote = 'Last change: ' + added + ' new, ' + changed + ' updated.'; }
       putFeedCfg(o);
       var ae = document.activeElement, typing = ae && /^(input|textarea|select)$/i.test(ae.tagName);
       if ((added || changed) && !typing && ['capture', 'setup'].indexOf(route.name) < 0 && !document.getElementById('scrim')) render(); else paintFeed();
-      if (added || changed || manual) saved(added || changed ? 'Feed: ' + added + ' new, ' + changed + ' updated' + (m.clashes ? '. ' + m.clashes + ' clashes held in Inbox.' : '') : 'Feed: nothing new', 4000);
+      paintAlerts();
+      if (added || changed || m.held || manual) saved(added || changed || m.held ? 'Feed: ' + added + ' new, ' + m.changed + ' updated' + (m.removed ? ', ' + m.removed + ' removed' : '') + (m.held ? '. ' + m.held + ' of your edits sit beside a newer feed line.' : '') : 'Feed: nothing new', 4000);
     }).catch(function (e) { if (gen === epoch) fail(feedErr(e)); }).then(function () { feeding = false; });
   }
+  // ---------- send my edits and captures (write-back to a small drop repo) ----------
+  // Every capture, every edit to a feed line and every "Save from Claude" block becomes one JSON file, inbox/<date>/<id>.json,
+  // created (never overwritten) in the drop repo with a write token that lives only on this device, in its own key: never in
+  // the record, so never synced, exported or backed up. A Claude session files the drops into the real records. The records
+  // repo stays read-only to the app. The queue is kept on the device and retried with a growing wait until it lands.
+  var DROP_TOKEN_KEY = 'polaris.drop.token', DROP_KEY = 'polaris.drop', DROP_Q_KEY = 'polaris.drop.q', dropBusy = false, dropTimer = 0;
+  function dropToken(v) {
+    try { if (v === undefined) return localStorage.getItem(DROP_TOKEN_KEY) || ''; if (v) localStorage.setItem(DROP_TOKEN_KEY, v); else localStorage.removeItem(DROP_TOKEN_KEY); } catch (e) { return ''; }
+  }
+  function dropCfg() {
+    var o = {}; try { o = JSON.parse(localStorage.getItem(DROP_KEY) || '{}') || {}; } catch (e) {}
+    return Object.assign({ slug: 'argorodrigo/polaris-drop', sentAt: '', errAt: '', errMsg: '', tries: 0, nextAt: 0, stop: '' }, o);
+  }
+  function putDropCfg(o) { try { localStorage.setItem(DROP_KEY, JSON.stringify(o)); } catch (e) {} }
+  function dropQ() { try { var q = JSON.parse(localStorage.getItem(DROP_Q_KEY) || '[]'); return Array.isArray(q) ? q : []; } catch (e) { return []; } }
+  function putDropQ(q) { try { localStorage.setItem(DROP_Q_KEY, JSON.stringify(q)); return true; } catch (e) { return false; } }
+  function dropAdd(entry) {
+    entry.v = 1; entry.id = C.uid(); entry.at = C.now(); entry.dev = deviceId();
+    var q = dropQ(); q.push(entry);
+    if (!putDropQ(q)) { toast('Could not queue this to send: this device is out of room. Export a backup now.', 6000); return; }
+    paintDrop(); dropKick(false);
+  }
+  function qCaptures(items, source) {
+    items.forEach(function (i) { dropAdd({ type: 'capture', source: source, item_id: i.id, item: { topic: i.topic || '', kind: i.kind || '', said: i.said || '', chat: i.chat || '', words: i.words || '', proposal: i.proposal || '', base: i.base || '' } }); });
+  }
+  function dropErr(e) {
+    var st = e && e.status;
+    if (st === 401) return 'GitHub did not accept the token';
+    if (st === 403) return e.limited ? 'GitHub rate limit reached, it will try again' : 'The token cannot write to this repo';
+    if (st === 404) return 'Not found: check the repo name, and that the token can see it';
+    if (st === 409) return 'GitHub was busy, it will try again';
+    if (st) return 'GitHub said ' + st;
+    if (e && e.plain) return e.message;
+    return 'Could not reach GitHub (offline?)';
+  }
+  function dropSend(e) {
+    var c = dropCfg(), mm = /^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)$/.exec(String(c.slug || '').trim()), tok = dropToken();
+    if (!mm) { var er = new Error('Use owner/repo, like argorodrigo/polaris-drop'); er.plain = true; er.fatal = true; er.stop = 'repo'; return Promise.reject(er); }
+    if (!navigator.onLine) { var eo = new Error('You are offline, it will try again'); eo.plain = true; return Promise.reject(eo); }
+    var path = ['inbox', String(e.at || C.now()).slice(0, 10), e.id + '.json'].map(encodeURIComponent).join('/');
+    var url = 'https://api.github.com/repos/' + encodeURIComponent(mm[1]) + '/' + encodeURIComponent(mm[2]) + '/contents/' + path;
+    var body = { message: 'polaris capture ' + e.id, content: C.b64(JSON.stringify(e, null, 1) + '\n') };  // create only: no sha, so GitHub refuses to overwrite
+    return fetch(url, { method: 'PUT', cache: 'no-store', headers: { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) {
+      if (r.status === 200 || r.status === 201) return;
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        var m = String((j && j.message) || '');
+        if (r.status === 422 && /sha/i.test(m)) return;  // that file is already there: an earlier try landed
+        var x = new Error('GitHub said ' + r.status); x.status = r.status; x.limited = r.headers.get('x-ratelimit-remaining') === '0' || /rate limit/i.test(m);
+        if (r.status === 401 || (r.status === 403 && !x.limited)) { x.fatal = true; x.stop = 'token'; }
+        throw x;
+      });
+    });
+  }
+  function dropRun() {
+    if (dropBusy) return; dropBusy = true;
+    (function next() {
+      var q = dropQ();
+      if (!q.length) { dropBusy = false; var c0 = dropCfg(); c0.errAt = ''; c0.errMsg = ''; c0.tries = 0; c0.nextAt = 0; c0.stop = ''; putDropCfg(c0); paintDrop(); return; }
+      var e = q[0];
+      dropSend(e).then(function () {
+        putDropQ(dropQ().filter(function (x) { return x.id !== e.id; }));
+        var c = dropCfg(); c.sentAt = C.now(); c.errAt = ''; c.errMsg = ''; c.tries = 0; c.nextAt = 0; c.stop = ''; putDropCfg(c); paintDrop(); next();
+      }, function (err) {
+        dropBusy = false; var c = dropCfg(); c.errAt = C.now(); c.errMsg = dropErr(err); c.tries = (c.tries || 0) + 1;
+        if (err && err.fatal) { c.stop = err.stop || 'token'; c.nextAt = 0; } else c.nextAt = Date.now() + Math.min(600000, 5000 * Math.pow(3, c.tries - 1));  // 5 s, 15 s, 45 s ... 10 min
+        putDropCfg(c); paintDrop(); if (!(err && err.fatal)) dropKick(false);
+      });
+    })();
+  }
+  // start sending now (force), or when the wait after a failure is over
+  function dropKick(force) {
+    clearTimeout(dropTimer);
+    var q = dropQ(), c = dropCfg(); if (!q.length || !dropToken()) { paintDrop(); return; }
+    if (c.stop && !force) { paintDrop(); return; }
+    var wait = force ? 0 : Math.max(0, (c.nextAt || 0) - Date.now());
+    if (wait > 0) { dropTimer = setTimeout(function () { dropKick(false); }, Math.min(wait, 2147483000)); paintDrop(); return; }
+    dropRun();
+  }
+  function dropStatus() {
+    var q = dropQ(), c = dropCfg(), tok = dropToken(), h = '';
+    if (q.length) {
+      h += '<span class="tag warn">Waiting to send (' + q.length + ')</span> ';
+      if (!tok) h += 'Add the drop token to send ' + (q.length > 1 ? 'them' : 'it') + '.';
+      else if (c.errAt) h += esc(c.errMsg || 'Something went wrong') + (c.stop ? '. Check it and tap Send now.' : '. It will try again on its own.');
+    } else if (tok && c.sentAt) h += '<span class="tag ok">Sent</span> Last sent ' + esc(fmtAt(c.sentAt)) + '.';
+    else h += 'Nothing to send yet.';
+    return h;
+  }
+  function dropCard() {
+    var dc = dropCfg(), dt = dropToken();
+    return '<div class="card" id="drop-card"><h2>Send my edits and captures to</h2><p class="small dim">Your edits to feed lines and everything you save from Claude go to a small private repo, one file each. A Claude session files them into your real records. Make a fine-grained token for that one repo with Contents set to Read and write. It stays on this device only: it is never synced and never goes into a backup or export. Your records repo stays read-only to polaris.</p>' +
+      '<div class="row"><div style="flex:1;min-width:220px"><label for="dr-repo">Owner / repo</label><input type="text" id="dr-repo" value="' + esc(dc.slug) + '" autocapitalize="off" spellcheck="false"></div></div>' +
+      '<label for="dr-token">Write token ' + (dt ? '(saved on this device)' : '') + '</label><input type="password" id="dr-token" placeholder="' + (dt ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022  leave blank to keep' : 'github_pat_\u2026') + '" autocomplete="off">' +
+      '<div class="row" style="margin-top:12px"><button class="btn primary" data-act="drop-save">Save and send now</button><button class="btn" data-act="drop-send">Send now</button>' + (dt ? '<button class="btn danger" data-act="drop-forget">Forget token</button>' : '') + '</div>' +
+      '<p class="small dim" id="drop-status" style="margin-top:10px">' + dropStatus() + '</p></div>';
+  }
+  function paintDrop() { var el = document.getElementById('drop-status'); if (el) el.innerHTML = dropStatus(); paintAlerts(); }
+
+  // ---------- Home chips: stale feed, feed error, drops waiting ----------
+  function feedAge() {
+    var c = feedCfg(); if (!feedToken()) return null;
+    if (c.errAt && (!c.lastPull || c.errAt > c.lastPull)) return { err: true };
+    var ms = c.generatedAt ? Date.now() - Date.parse(c.generatedAt) : NaN;
+    if (ms === ms && ms > 3 * 3600000) { var h = Math.floor(ms / 3600000); return { text: 'Feed ' + (h >= 48 ? Math.floor(h / 24) + 'd' : h + 'h') + ' old' }; }
+    return null;
+  }
+  function chipsHtml() {
+    var h = '', fa = feedAge(), n = dropQ().length;
+    if (feedCfg().held && feedToken()) h += '<a class="chip stale" id="chip-hold" href="#settings" role="status">Feed: ' + feedCfg().held.n + ' removals waiting for you</a>';
+    if (fa) h += '<a class="chip stale" id="chip-feed" href="#settings" role="status">' + (fa.err ? 'Feed error' : esc(fa.text)) + '</a>';
+    if (n) h += '<a class="chip" id="chip-drop" href="#settings" role="status">Waiting to send (' + n + ')</a>';
+    return h;
+  }
+  function alertsHtml() {
+    var h = '';
+    if (Store.noIdb) h += '<div class="card warnbox" id="storage-warn" role="alert"><h3 style="margin:0 0 4px"><span class="tag warn">Storage limited</span> This browser is not letting polaris use its main storage</h3><p class="small dim" style="margin:0">polaris is saving into a small 5 MB space instead, and your record may not fit once the feed is in. Nothing is lost yet. Open polaris from its Home Screen icon (Share, then Add to Home Screen), leave Private Browsing, or update iOS, then reopen it. Until then, export a backup now and then.</p></div>';
+    if (needsUpdate()) h += '<div class="card warnbox" id="upd-notice"><span class="tag">Update needed</span> <span class="small">' + esc(UPD_TEXT) + '</span></div>';
+    return h + '<div class="chips" id="home-chips">' + chipsHtml() + '</div>';
+  }
+  function paintAlerts() { var el = document.getElementById('home-alerts'); if (el) el.innerHTML = alertsHtml(); }
+
   // ---------- events ----------
   var ACT = {
+    'edit-take-feed': function (v) {
+      var L = findAny(v); if (!L || !L.x.edit || !L.x.edit.feedNew) return;
+      var fn = L.x.edit.feedNew; EF.forEach(function (k) { if (k in fn) L.x[k] = fn[k]; else delete L.x[k]; });
+      delete L.x.edit; touch(L.x); save(); render(); saved('Using the feed\'s version');
+    },
+    'edit-drop-removed': function (v) {
+      var L = findAny(v); if (!L) return;
+      confirmBox('Remove this line?', 'The feed removed it. Your edit was already sent to your drop repo.', 'Remove it', function () { var i = L.arr.indexOf(L.x); if (i >= 0) L.arr.splice(i, 1); save(); render(); });
+    },
+    'drop-save': function () {
+      var c = dropCfg(), slug = document.getElementById('dr-repo').value.trim() || 'argorodrigo/polaris-drop';
+      c.slug = slug; c.stop = ''; c.nextAt = 0; c.tries = 0; putDropCfg(c);
+      var t = document.getElementById('dr-token').value.trim(); if (t) dropToken(t);
+      render(); toast(dropToken() ? 'Saved. Sending what is waiting.' : 'Saved. Add the token to send.'); dropKick(true);
+    },
+    'drop-send': function () { var c = dropCfg(); c.stop = ''; c.nextAt = 0; c.tries = 0; putDropCfg(c); if (!dropToken()) toast('Add the write token first'); else if (!dropQ().length) toast('Nothing waiting to send'); dropKick(true); },
+    'drop-forget': function () { confirmBox('Forget the drop token?', 'It is removed from this device. What is waiting to send stays queued here. Your record is untouched.', 'Forget it', function () { dropToken(null); render(); toast('Drop token removed from this device'); }); },
     close: function () { closeModal(); pending = null; nextSup(); },
     'confirm-yes': function () { var p = pending; closeModal(); pending = null; if (p) p(); },
     'form-save': function () { if (pending && pending() !== false) { closeModal(); pending = null; save(); render(); nextSup(); } },
@@ -1845,7 +2168,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
       function done(txt) {
         var r = C.parseHandoff(txt || '', { chat: 'Claude' });
         if (!r.items.length) { ui.capture = { text: txt || '', chat: '', result: null }; toast('No POLARIS box on your clipboard. Copy Claude\'s whole reply, then tap again.', 5000); go('capture'); return; }
-                r.items.forEach(function (i) { S.inbox.push(i); }); var n = applyAll(r.items, { ask: true }), hn = ui.heldNew.n, hnames = ui.heldNew.names, left = r.items.filter(function (i) { return i.status === 'proposed'; }).length;
+                qCaptures(r.items, 'save-from-claude'); r.items.forEach(function (i) { S.inbox.push(i); }); var n = applyAll(r.items, { ask: true }), hn = ui.heldNew.n, hnames = ui.heldNew.names, left = r.items.filter(function (i) { return i.status === 'proposed'; }).length;
         if (!Store.ok) { toast('Not saved: this device is out of room. Export a backup in Settings.', 6000); render(); return; }
         var names = {};
         r.items.forEach(function (i) { if (i.status === 'applied' && i.topic) { var t = topicByName(i.topic); if (t) names[t.name] = 1; } });
@@ -1891,32 +2214,32 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     'topic-rename': function () { var t = topicById(route.arg); if (t.locked) return toast('This topic is locked'); modal('<h2>Rename topic</h2><input type="text" id="nt" value="' + esc(t.name) + '"><div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn ghost" data-act="close">Cancel</button><button class="btn primary" data-act="form-save">Save</button></div>'); pending = function () { var n = document.getElementById('nt').value.trim(); if (!n) return false; t.name = n; touch(t); return true; }; },
     'topic-md': function () { copy(C.topicMarkdown(topicById(route.arg))); },
     tab: function (v) { ui.topicTab = v; ui.tabPicked = true; render(); },
-    'step-toggle': function (v) { var t = topicById(route.arg), h = findLine(t, v); if (!h) return; h.x.status = h.x.status === 'done' ? 'next' : 'done'; if (h.x.status === 'done') h.x.doneOn = C.today(); touch(h.x); touch(t); save(); render(); },
+    'step-toggle': function (v) { var t = topicById(route.arg), h = findLine(t, v); if (!h) return; tracked(h.x, h.list, t, function () { h.x.status = h.x.status === 'done' ? 'next' : 'done'; if (h.x.status === 'done') h.x.doneOn = C.today(); touch(h.x); }); touch(t); save(); render(); },
     'apply-all': function () { var n = applyAll(S.inbox.filter(function (i) { return i.status === ui.inboxFilter; }), { ask: true }), h = ui.heldNew.n; render(); saved(n + ' applied' + (h ? '. ' + h + ' held for new topics: tap Make this topic' : '')); },
     'add-line': function (v) { var t = topicById(route.arg); form('Add to ' + t.name, v, v === 'questions' ? { status: 'open' } : null, function (o) { var x = newItem(o); if (v === 'questions') x.status = 'open'; if (v === 'conflicts') x.status = 'open'; if (v === 'decisions' && x.who === 'assistant') S.log.push(newItem({ type: 'call', text: x.text, fix: '', said: x.said, status: 'open' })); t[v].push(x); touch(t); if (t.status === 'not started') t.status = 'partly'; }); },
-    'edit-line': function (v) { var t = topicById(route.arg), h = findLine(t, v); if (!h || h.x.locked) return; form('Edit', h.list, h.x, function (o) { Object.assign(h.x, o); touch(h.x); touch(t); }); },
-    supersede: function (v) { var t = topicById(route.arg), h = findLine(t, v); h.x.superseded = true; touch(h.x); touch(t); save(); render(); saved('Marked superseded. It stays in the record.'); },
-    'lock-line': function (v) { var t = topicById(route.arg), h = findLine(t, v); h.x.locked = !h.x.locked; touch(h.x); save(); render(); },
-    'archive-line': function (v) { var t = topicById(route.arg), h = findLine(t, v); confirmBox('Archive this line?', 'It leaves the record view but stays in your data and exports. Nothing is deleted.', 'Archive', function () { h.x.archived = true; touch(h.x); touch(t); save(); render(); }); },
-    answer: function (v) { var t = topicById(route.arg), h = findLine(t, v); modal('<h2>Answer</h2><p class="dim">' + esc(h.x.text) + '</p><textarea id="ans"></textarea><div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn ghost" data-act="close">Cancel</button><button class="btn primary" data-act="form-save">Save</button></div>'); pending = function () { var a = document.getElementById('ans').value.trim(); if (!a) return false; h.x.answer = a; h.x.status = 'answered'; h.x.answered = C.today(); touch(h.x); return true; }; },
-    settle: function (v) { var t = topicById(route.arg), h = findLine(t, v); modal('<h2>Settle conflict</h2><p class="small dim">Pick which version stands. The record keeps both.</p><label class="check"><input type="radio" name="sv" value="first" checked><span>' + esc(h.x.text) + '</span></label><label class="check"><input type="radio" name="sv" value="other"><span>' + esc(h.x.other || '(the other version)') + '</span></label><label class="check"><input type="radio" name="sv" value="superseded"><span>Superseded: both are out of date</span></label><div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn ghost" data-act="close">Cancel</button><button class="btn primary" data-act="form-save">Settle</button></div>'); pending = function () { var c = document.querySelector('input[name=sv]:checked').value; h.x.status = 'settled'; h.x.resolution = c; h.x.answer = c === 'first' ? 'Stands: ' + h.x.text : c === 'other' ? 'Stands: ' + h.x.other : 'Both superseded'; touch(h.x); return true; }; },
+    'edit-line': function (v) { var t = topicById(route.arg), h = findLine(t, v); if (!h || h.x.locked) return; form('Edit', h.list, h.x, function (o) { tracked(h.x, h.list, t, function () { Object.assign(h.x, o); touch(h.x); }); touch(t); }); },
+    supersede: function (v) { var t = topicById(route.arg), h = findLine(t, v); tracked(h.x, h.list, t, function () { h.x.superseded = true; touch(h.x); }); touch(t); save(); render(); saved('Marked superseded. It stays in the record.'); },
+    'lock-line': function (v) { var t = topicById(route.arg), h = findLine(t, v); tracked(h.x, h.list, t, function () { h.x.locked = !h.x.locked; touch(h.x); }); save(); render(); },
+    'archive-line': function (v) { var t = topicById(route.arg), h = findLine(t, v); confirmBox('Archive this line?', 'It leaves the record view but stays in your data and exports. Nothing is deleted.', 'Archive', function () { tracked(h.x, h.list, t, function () { h.x.archived = true; touch(h.x); }); touch(t); save(); render(); }); },
+    answer: function (v) { var t = topicById(route.arg), h = findLine(t, v); modal('<h2>Answer</h2><p class="dim">' + esc(h.x.text) + '</p><textarea id="ans"></textarea><div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn ghost" data-act="close">Cancel</button><button class="btn primary" data-act="form-save">Save</button></div>'); pending = function () { var a = document.getElementById('ans').value.trim(); if (!a) return false; tracked(h.x, h.list, t, function () { h.x.answer = a; h.x.status = 'answered'; h.x.answered = C.today(); touch(h.x); }); return true; }; },
+    settle: function (v) { var t = topicById(route.arg), h = findLine(t, v); modal('<h2>Settle conflict</h2><p class="small dim">Pick which version stands. The record keeps both.</p><label class="check"><input type="radio" name="sv" value="first" checked><span>' + esc(h.x.text) + '</span></label><label class="check"><input type="radio" name="sv" value="other"><span>' + esc(h.x.other || '(the other version)') + '</span></label><label class="check"><input type="radio" name="sv" value="superseded"><span>Superseded: both are out of date</span></label><div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn ghost" data-act="close">Cancel</button><button class="btn primary" data-act="form-save">Settle</button></div>'); pending = function () { var c = document.querySelector('input[name=sv]:checked').value; tracked(h.x, h.list, t, function () { h.x.status = 'settled'; h.x.resolution = c; h.x.answer = c === 'first' ? 'Stands: ' + h.x.text : c === 'other' ? 'Stands: ' + h.x.other : 'Both superseded'; touch(h.x); }); return true; }; },
     'topic-status': null,
     parse: function () { var t = document.getElementById('cap-text').value, ch = document.getElementById('cap-chat').value.trim(); ui.capture = { text: t, chat: ch, result: C.parseHandoff(t, { chat: ch }) }; render(); },
-    'cap-add': function () { var r = ui.capture.result; r.items.forEach(function (i) { S.inbox.push(i); }); save(); if (!Store.ok) { render(); return; } ui.capture = null; ui.inboxFilter = 'proposed'; toast(r.items.length + ' added to your Inbox'); go('inbox'); },
-    'inbox-manual': function () { form('New Inbox item', 'inbox', { kind: 'fact' }, function (o) { S.inbox.push(newItem(Object.assign(o, { status: 'proposed' }))); }); },
+    'cap-add': function () { var r = ui.capture.result; qCaptures(r.items, 'capture'); r.items.forEach(function (i) { S.inbox.push(i); }); save(); if (!Store.ok) { render(); return; } ui.capture = null; ui.inboxFilter = 'proposed'; toast(r.items.length + ' added to your Inbox'); go('inbox'); },
+    'inbox-manual': function () { form('New Inbox item', 'inbox', { kind: 'fact' }, function (o) { var ni = newItem(Object.assign(o, { status: 'proposed' })); S.inbox.push(ni); qCaptures([ni], 'manual'); }); },
     'inbox-filter': function (v) { ui.inboxFilter = v; render(); },
     apply: function (v) { var i = S.inbox.filter(function (x) { return x.id === v; })[0], sel = document.querySelector('select[data-v="' + v + '"]'); var r = applyInbox(i, sel ? sel.value : ''); if (r === true) { save(); render(); saved('Applied'); } else if (r === 'asked') { shell(); } else if (r === 'held') { save(); render(); toast('Held. Topic ' + i.topic + ' does not exist yet. Tap Make this topic, or pick another.', 5000); } },
     'make-topic': function (v) { var i = S.inbox.filter(function (x) { return x.id === v; })[0]; if (!i || !needsNewTopic(i)) return; var r = applyInbox(i, '', { make: true }); save(); render(); if (r === 'asked') shell(); else saved('Made topic ' + i.topic + ' and applied'); },
     hold: function (v) { var i = S.inbox.filter(function (x) { return x.id === v; })[0]; i.status = 'held'; touch(i); save(); render(); },
     reject: function (v) { var i = S.inbox.filter(function (x) { return x.id === v; })[0]; i.status = 'rejected'; touch(i); save(); render(); saved('Rejected. Kept under Rejected.'); },
     'add-wait': function () { form('Waiting on you', 'waiting', null, function (o) { S.waiting.push(newItem(o)); }); },
-    'archive-wait': function (v) { var w = S.waiting.filter(function (x) { return x.id === v; })[0]; confirmBox('Archive this card?', 'It is kept in your data and exports.', 'Archive', function () { w.archived = true; touch(w); save(); render(); }); },
+    'archive-wait': function (v) { var w = S.waiting.filter(function (x) { return x.id === v; })[0]; confirmBox('Archive this card?', 'It is kept in your data and exports.', 'Archive', function () { tracked(w, 'waiting', w.topic ? topicById(w.topic) : null, function () { w.archived = true; touch(w); }); save(); render(); }); },
     'add-asset': function () { form('Add to the Vault', 'vault', null, function (o) { o.status = 'unreviewed'; S.vault.push(newItem(o)); }); },
-    'asset-status': function (v) { var a = S.vault.filter(function (x) { return x.id === v; })[0]; a.status = a.status === 'approved' ? 'unreviewed' : 'approved'; touch(a); save(); render(); },
-    'archive-asset': function (v) { var a = S.vault.filter(function (x) { return x.id === v; })[0]; confirmBox('Archive this entry?', 'It is kept in your data and exports.', 'Archive', function () { a.archived = true; touch(a); save(); render(); }); },
+    'asset-status': function (v) { var a = S.vault.filter(function (x) { return x.id === v; })[0]; tracked(a, 'vault', a.topic ? topicById(a.topic) : null, function () { a.status = a.status === 'approved' ? 'unreviewed' : 'approved'; touch(a); }); save(); render(); },
+    'archive-asset': function (v) { var a = S.vault.filter(function (x) { return x.id === v; })[0]; confirmBox('Archive this entry?', 'It is kept in your data and exports.', 'Archive', function () { tracked(a, 'vault', a.topic ? topicById(a.topic) : null, function () { a.archived = true; touch(a); }); save(); render(); }); },
     'vault-filter': function (v) { ui.vaultFilter = v; render(); },
     'add-log': function () { form('Add to the Log', 'log', null, function (o) { o.status = 'open'; S.log.push(newItem(o)); }); },
-    'log-done': function (v) { var l = S.log.filter(function (x) { return x.id === v; })[0]; l.status = l.status === 'done' ? 'open' : 'done'; touch(l); save(); render(); },
+    'log-done': function (v) { var l = S.log.filter(function (x) { return x.id === v; })[0]; tracked(l, 'log', null, function () { l.status = l.status === 'done' ? 'open' : 'done'; touch(l); }); save(); render(); },
     'log-filter': function (v) { ui.logFilter = v; render(); },
     'review-done': function () { S.reviews.push({ id: C.uid(), at: C.now(), note: document.getElementById('rv-note').value.trim(), updated: C.now() }); save(); if (!Store.ok) return; toast('Review logged'); go('home'); },
     'recap-done': function () { S.reviews.push({ id: C.uid(), at: C.now(), note: '', updated: C.now() }); save(); render(); saved('Marked reviewed'); },
@@ -1925,7 +2248,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     'js-save': function () {
       var txt = document.getElementById('js-text').value, r = C.parseHandoff(txt, { chat: 'jumpstart', topic: jumpTopic() });
       if (!r.items.length) { ui.jsText = txt; toast('No POLARIS block found. Copy the whole reply, including the line POLARIS v1.', 5000); return; }
-      r.items.forEach(function (i) { if (!i.topic) i.topic = jumpTopic() || 'General'; S.inbox.push(i); });
+      r.items.forEach(function (i) { if (!i.topic) i.topic = jumpTopic() || 'General'; S.inbox.push(i); }); qCaptures(r.items, 'jumpstart');
       applyAll(r.items, { make: true }); S.settings.setupDone = true; if (!S.settings.setupAt) S.settings.setupAt = C.now(); save(); if (!Store.ok) { ui.jsText = txt; render(); return; } ui.jsText = ''; ui.setupStep = 2; render(); window.scrollTo(0, 0);
     },
     'setup-later': function () { ui.setupStep = 0; go('home'); },
@@ -1953,9 +2276,12 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
       if (slug !== c.slug || path !== c.path) c.etag = '';  // a different file: ask for it fresh
       c.slug = slug; c.path = path; putFeedCfg(c);
       var t = document.getElementById('fd-token').value.trim(); if (t) { feedToken(t); c = feedCfg(); c.etag = ''; putFeedCfg(c); }
+      if (!feedToken()) return toast('Paste the read-only token first');
+      render(); toast('Token saved on this device. Pulling the feed...', 3000);  // redraw so the card shows "saved on this device"
       feedPull(true);
     },
     'feed-pull': function () { feedPull(true); },
+    'feed-apply': function () { var c = feedCfg(); if (!c.held) return; confirmBox('Retire ' + c.held.n + ' old feed lines?', 'The feed replaced them with new lines under new ids. Lines you added by hand are never removed, and what you ticked, pinned or edited moves to the new line. This runs in one step.', 'Apply', function () { var o = feedCfg(); o.etag = ''; putFeedCfg(o); feedPull(true, true); }); },
     'feed-forget': function () { confirmBox('Forget the feed token?', 'It is removed from this device. Your repo and your record are untouched.', 'Forget it', function () { feedToken(null); var c = feedCfg(); c.etag = ''; putFeedCfg(c); render(); toast('Feed token removed from this device'); }); },
     'export-json': function () { S.meta.lastBackup = C.now(); save(); download('polaris-backup-' + new Date().toISOString().slice(0, 10) + '.json', [JSON.stringify(S, null, 2)], 'application/json'); },
     'export-md': function () { S.meta.lastBackup = C.now(); save(); download('polaris-' + new Date().toISOString().slice(0, 10) + '.zip', C.zip(C.bundle(S)), 'application/zip'); },
@@ -1972,7 +2298,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
   function onChange(e) {
     var el = e.target, a = el.getAttribute('data-act');
     if (a === 'topic-status') { var t = topicById(route.arg); t.status = el.value; touch(t); save(); saved('Status: ' + el.value); }
-    if (a === 'toggle-wait') { var w = S.waiting.filter(function (x) { return x.id === el.getAttribute('data-v'); })[0]; w.done = el.checked; w.doneOn = el.checked ? C.today() : ''; touch(w); save(); render(); }
+    if (a === 'toggle-wait') { var w = S.waiting.filter(function (x) { return x.id === el.getAttribute('data-v'); })[0]; tracked(w, 'waiting', w.topic ? topicById(w.topic) : null, function () { w.done = el.checked; w.doneOn = el.checked ? C.today() : ''; touch(w); }); save(); render(); }
     if (a === 'rule') ACT.rule(el.getAttribute('data-v'), el);
     if (el.id === 'imp' && el.files[0]) readFile(el.files[0], 'text', function (txt) {
       var j; try { j = JSON.parse(txt); } catch (x) { return toast('That file is not JSON'); }
@@ -2051,6 +2377,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
   function start() {
     if (!S) { S = C.emptyState(); var P = window.POLARIS_PRESET || {}, m = (location.hash || '').match(/^#name-([A-Za-z\u00C0-\u024F' -]{1,30})$/); if (P.name) S.profile.name = P.name; else if (m) { S.profile.name = decodeURIComponent(m[1]); location.hash = 'setup'; } if (S.profile.name) Store.save(S); }
     if (!Store.ok) toast('This browser blocks storage. Your work will not be kept. Export often.', 6000);
+    else if (Store.noIdb) toast('This browser is not letting polaris use its main storage. See the note on Home.', 8000);
     Store.persist(); if (lookList()) applyLook(lookNow());
     document.body.addEventListener('click', onClick);
     document.body.addEventListener('change', onChange);
@@ -2064,8 +2391,19 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     // the repo feed: on open, then every 30 minutes while the app is open (pull only)
     if (feedToken()) setTimeout(function () { feedPull(false); }, 1500);
     setInterval(function () { if (feedToken()) feedPull(false); }, FEED_EVERY);
+    // drops: try on open, when back online, when the app comes forward, and on a quiet timer; the chip's age refreshes each minute
+    setTimeout(function () { dropKick(false); }, 2000);
+    window.addEventListener('online', function () { dropKick(false); });
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) dropKick(false); });
+    setInterval(function () { if (!document.hidden) dropKick(false); }, 60000);
+    setInterval(function () { if (!document.hidden) paintAlerts(); }, 60000);
   }
-  window.__polaris = { state: function () { return S; }, version: VERSION, flush: function () { return Store.flush(); }, backend: function () { return Store.backend; } };
+  // size of what device sync would carry, against the cap the server holds (4 MiB)
+  function payloadSize() { var v = syncView(S); return pack(v).then(function (b) { return { full: JSON.stringify(S).length, view: JSON.stringify(v).length, packed: b.length, cap: 4 * 1024 * 1024 }; }); }
+  window.__polaris = { state: function () { return S; }, version: VERSION, payload: payloadSize, syncView: function () { return syncView(S); },
+    t: { seal: function (code, rev, obj) { return readCode(code).then(derive).then(function (v) { return seal(v, rev, obj).then(function (box) { return { box: box, id: v.id, token: v.token }; }); }); },
+         rawHead: function (code, rev, box) { return readCode(code).then(derive).then(function (v) { return crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64u(box.iv), additionalData: enc.encode('pv1:' + v.id + ':' + rev) }, v.key, unb64u(box.ct)); }).then(function (pt) { var b = new Uint8Array(pt); return b[0] === 80 && b[1] === 90 ? 'PZ' : String.fromCharCode(b[0], b[1]); }); },
+         unseal: function (code, rev, box) { return readCode(code).then(derive).then(function (v) { return unseal(v, rev, box); }); } }, flush: function () { return Store.flush(); }, backend: function () { return Store.backend; } };
 })();
 </script>
 </body>
