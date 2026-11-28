@@ -644,13 +644,88 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
   var S, $app, route = { name: 'home', arg: '' }, ui = { topicTab: 'start', inboxFilter: 'proposed', vaultFilter: 'all', logFilter: 'all', capture: null };
 
   // ---------- storage adapter ----------
+  // The record lives in IndexedDB (room for a big import). Reads are served from memory so the rest of the app stays
+  // synchronous; writes are queued and always carry the newest copy. Older devices keep their data: on first launch the
+  // old localStorage copy is moved into IndexedDB, checked, and only then removed. If IndexedDB is not available the
+  // adapter falls back to localStorage exactly as before.
+  var IDB_NAME = 'polaris-open', IDB_STORE = 'kv', SNAP_KEY = 'polaris.snapshot';
+  var idbP = null;
+  function idb() {
+    if (idbP) return idbP;
+    idbP = new Promise(function (res, rej) {
+      var done = false, to = setTimeout(function () { if (!done) { done = true; rej(new Error('IndexedDB timed out')); } }, 5000);
+      function ok(v) { if (!done) { done = true; clearTimeout(to); res(v); } }
+      function no(e) { if (!done) { done = true; clearTimeout(to); rej(e || new Error('IndexedDB blocked')); } }
+      try {
+        if (!window.indexedDB) return no(new Error('no IndexedDB'));
+        var r = indexedDB.open(IDB_NAME, 1);
+        r.onupgradeneeded = function () { if (!r.result.objectStoreNames.contains(IDB_STORE)) r.result.createObjectStore(IDB_STORE); };
+        r.onsuccess = function () { r.result.onversionchange = function () { try { r.result.close(); } catch (e) {} idbP = null; }; ok(r.result); };
+        r.onerror = function () { no(r.error); };
+        r.onblocked = function () { no(new Error('IndexedDB blocked')); };
+      } catch (e) { no(e); }
+    });
+    idbP.catch(function () { idbP = null; });
+    return idbP;
+  }
+  function idbOp(mode, fn) {
+    return idb().then(function (db) {
+      return new Promise(function (res, rej) {
+        var tx = db.transaction(IDB_STORE, mode), st = tx.objectStore(IDB_STORE), out = fn(st);
+        tx.oncomplete = function () { res(out && out.result); };
+        tx.onerror = function () { rej(tx.error || (out && out.error)); };
+        tx.onabort = function () { rej(tx.error || new Error('IndexedDB write aborted')); };
+      });
+    });
+  }
+  function idbGet(k) { return idbOp('readonly', function (st) { return st.get(k); }); }
+  function idbSet(k, v) { return idbOp('readwrite', function (st) { return st.put(v, k); }); }
+  function idbDel(k) { return idbOp('readwrite', function (st) { return st['delete'](k); }); }
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsDel(k) { try { localStorage.removeItem(k); } catch (e) {} }
   var Store = {
     ok: true,
     unreadable: false,  // saved data exists but could not be read: never write over it
+    backend: 'idb',     // 'idb', or 'ls' when IndexedDB is not usable
+    mem: null,          // the saved record as text, as last read or written
+    q: Promise.resolve(), pend: false,
+    quota: 0, usage: 0,
+    // Reads the record into memory (and moves an old localStorage copy over). Always resolves.
+    init: function () {
+      var self = this;
+      self.unreadable = false;
+      function fallback() {
+        self.backend = 'ls';
+        try { self.mem = localStorage.getItem(KEY); } catch (e) { self.unreadable = true; self.mem = null; }
+      }
+      return idb().then(function () { return Promise.all([idbGet(KEY), idbGet(SNAP_KEY)]); }).then(function (r) {
+        var cur = r[0], lsRaw = lsGet(KEY), lsSnap = lsGet(SNAP_KEY);
+        self.backend = 'idb';
+        if (typeof cur !== 'string' || cur === '') cur = null;
+        var next = cur, steps = [];
+        if (lsRaw != null && lsRaw !== '') {
+          if (cur == null) next = lsRaw;
+          else if (lsRaw !== cur) {  // a stray old copy next to the new one (an old tab kept writing): keep both
+            try { var a = JSON.parse(cur), b = JSON.parse(lsRaw); if (C.validate(b).length === 0 && C.validate(a).length === 0) next = JSON.stringify(C.merge(a, b, '').state); } catch (e) { next = cur; }
+          }
+          if (next !== cur) steps.push(idbSet(KEY, next).then(function () { return idbGet(KEY); }).then(function (back) { if (back !== next) throw new Error('copy did not match'); }));
+        }
+        if (lsSnap) steps.push(idbGet(SNAP_KEY).then(function (have) { return have ? null : idbSet(SNAP_KEY, lsSnap); }));
+        return Promise.all(steps).then(function () {
+          // everything is safely in IndexedDB: only now let go of the old copies
+          if (lsRaw != null && lsRaw !== '') lsDel(KEY);
+          if (lsSnap) lsDel(SNAP_KEY);
+          self.mem = next;
+        });
+      }).catch(function (e) {
+        // Could not use IndexedDB, or the move failed: keep working from localStorage, which still holds the data
+        fallback();
+      }).then(function () { return self.estimate(); });
+    },
     load: function () {
-      var raw;
       this.unreadable = false;
-      try { raw = localStorage.getItem(KEY); } catch (e) { this.unreadable = true; return null; }
+      var raw = this.mem;
+      if (this.backend === 'ls') { try { raw = localStorage.getItem(KEY); this.mem = raw; } catch (e) { this.unreadable = true; return null; } }
       if (raw == null || raw === '') return null;  // a real first launch
       try {
         var j = JSON.parse(raw);
@@ -658,15 +733,53 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
         return C.migrate(j);
       } catch (e) { this.unreadable = true; return null; }
     },
-    raw: function () { try { return localStorage.getItem(KEY); } catch (e) { return null; } },
+    raw: function () { return this.mem; },
+    fail: function (e) {
+      this.ok = false;
+      toast('Could not save on this device. Export a backup now.');
+      if (syncing) syncFail('This device is out of room');
+      try { render(); } catch (x) {}
+    },
     save: function (s) {
       if (this.unreadable) { this.ok = false; return false; }
       s.meta.updated = C.now();
-      try { localStorage.setItem(KEY, JSON.stringify(s)); this.ok = true; }
-      catch (e) { this.ok = false; toast('Could not save on this device. Export a backup now.'); if (syncing) syncFail('This device is out of room'); }
-      return this.ok;
+      var self = this, str = JSON.stringify(s);
+      if (this.backend === 'ls') {
+        try { localStorage.setItem(KEY, str); this.mem = str; this.ok = true; } catch (e) { this.fail(e); }
+        return this.ok;
+      }
+      this.mem = str; this.ok = true;
+      if (!this.pend) {
+        this.pend = true;
+        this.q = this.q.then(function () { self.pend = false; return idbSet(KEY, self.mem); }).then(function () { self.ok = true; self.usage = 0; }, function (e) { self.fail(e); });
+      }
+      return true;
     },
-    size: function () { try { return (localStorage.getItem(KEY) || '').length * 2; } catch (e) { return 0; } },
+    // resolves when every queued write has landed
+    flush: function () { return this.q; },
+    // erase the record and the safety copy (queued behind any write in flight)
+    wipe: function () {
+      var self = this; this.mem = null; this.pend = false;
+      lsDel(KEY); lsDel(SNAP_KEY);
+      if (this.backend === 'idb') this.q = this.q.then(function () { return idbDel(KEY); }).then(function () { return idbDel(SNAP_KEY); }).catch(function () {});
+      return this.q;
+    },
+    // a safety copy of what was here before joining another device (best effort)
+    snap: function (obj) {
+      var str = JSON.stringify(obj);
+      if (this.backend === 'ls') { try { localStorage.setItem(SNAP_KEY, str); } catch (e) {} return; }
+      this.q = this.q.then(function () { return idbSet(SNAP_KEY, str); }).catch(function () {});
+    },
+    size: function () { return (this.mem || '').length * 2; },
+    // how much room this browser gives polaris (not a fixed 5 MB any more)
+    estimate: function () {
+      var self = this;
+      if (this.backend === 'ls') { this.quota = 5 * 1024 * 1024; return Promise.resolve(); }
+      try {
+        if (navigator.storage && navigator.storage.estimate) return navigator.storage.estimate().then(function (e) { self.quota = (e && e.quota) || 0; self.usage = (e && e.usage) || 0; }, function () {});
+      } catch (e) {}
+      return Promise.resolve();
+    },
     token: function (v) {
       try { if (v === undefined) return localStorage.getItem(TOKEN_KEY) || ''; if (v) localStorage.setItem(TOKEN_KEY, v); else localStorage.removeItem(TOKEN_KEY); } catch (e) { return ''; }
     },
@@ -1244,11 +1357,18 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     return h + '<ul class="list" style="margin-top:6px">' + li.join('') + '</ul>' + (r.other ? '<p class="small dim" style="margin:6px 0 0">' + r.other + ' of these came from your other device.</p>' : '') + '<div class="row" style="margin-top:10px"><button class="btn sm" data-act="recap-done">Mark reviewed</button></div></div>';
   }
 
+  function fmtSize(b) { return b >= 1048576 ? (b / 1048576).toFixed(b >= 10485760 ? 0 : 1) + ' MB' : b >= 1073741824 ? '' : Math.round(b / 1024) + ' KB'; }
+  function fmtRoom(b) { return b >= 1073741824 ? (b / 1073741824).toFixed(1).replace(/\.0$/, '') + ' GB' : fmtSize(b); }
+  function quotaText(kb) {
+    var used = fmtSize(Store.size());
+    if (Store.backend === 'ls') return 'Using about ' + used + ' of roughly 5 MB browser storage.';
+    return 'Using about ' + used + (Store.quota ? ' of the ' + fmtRoom(Store.quota) + ' this browser allows polaris.' : ' on this device.');
+  }
   V.settings = function () {
-    var gh = S.settings.gh, tok = Store.token(), kb = Math.round(Store.size() / 1024), pct = Math.min(100, Math.round(kb / 50));
+    var gh = S.settings.gh, tok = Store.token(), kb = Math.round(Store.size() / 1024), pct = Store.quota ? Math.min(100, Math.max(kb ? 1 : 0, Math.round(Store.size() / Store.quota * 100))) : 0;
     var h = top() + '<div class="wrap" style="max-width:720px"><h1>Settings</h1>';
     h += '<div class="card"><h2>Your data</h2><div class="seg" style="margin:6px 0 10px"><button data-act="mode" data-v="device" class="' + (S.settings.dataMode !== 'github' ? 'on' : '') + '">On this device</button><button data-act="mode" data-v="github" class="' + (S.settings.dataMode === 'github' ? 'on' : '') + '">GitHub sync</button></div>' +
-      '<div class="small dim">Using about ' + kb + ' KB of roughly 5 MB browser storage.</div><div class="meter" style="margin:6px 0 10px"><i style="width:' + pct + '%"></i></div>' +
+      '<div class="small dim" id="quota-line">' + quotaText(kb) + '</div><div class="meter" style="margin:6px 0 10px"><i style="width:' + pct + '%"></i></div>' +
       (S.settings.dataMode === 'github' ? syncStatus() : '') + '<div class="small dim">Last backup: ' + fmtDay(S.meta.lastBackup) + (S.settings.dataMode === 'github' ? ' · Last sync: ' + fmtDay(S.meta.lastSync) : '') + '</div></div>';
     h += lookCard();
     if (S.settings.dataMode === 'github') h += '<div class="card"><h2>GitHub sync</h2><p class="small dim">Use a private repo and a fine-grained token limited to that repo with Contents: Read and write. <a href="#guide">How</a></p>' +
@@ -1457,14 +1577,33 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
       ]).then(function (r) { return { id: hex(r[0]), token: b64u(r[1]), key: r[2] }; });
     });
   }
+  // Sealed payloads: AES-GCM over either plain JSON (older copies, first byte "{") or MAGIC + gzip(JSON) (bigger records).
+  var MAGIC = [80, 90, 49, 58];  // "PZ1:"
+  function gzipOk() { return typeof CompressionStream === 'function' && typeof DecompressionStream === 'function'; }
+  function pipe(bytes, stream) {
+    var w = stream.writable.getWriter();
+    w.write(bytes).catch(function () {}); w.close().catch(function () {});
+    return new Response(stream.readable).arrayBuffer().then(function (b) { return new Uint8Array(b); });
+  }
+  function pack(obj) {
+    var raw = enc.encode(JSON.stringify(obj));
+    if (!gzipOk() || raw.length < 4096) return Promise.resolve(raw);
+    return pipe(raw, new CompressionStream('gzip')).then(function (gz) { var out = new Uint8Array(MAGIC.length + gz.length); out.set(MAGIC, 0); out.set(gz, MAGIC.length); return out; }, function () { return raw; });
+  }
+  function unpack(pt) {
+    var b = new Uint8Array(pt), zipped = MAGIC.every(function (m, i) { return b[i] === m; });
+    if (!zipped) return Promise.resolve(JSON.parse(dec.decode(b)));
+    if (!gzipOk()) throw new Error('This browser is too old to open the synced copy. Update it, or use another browser.');
+    return pipe(b.subarray(MAGIC.length), new DecompressionStream('gzip')).then(function (raw) { return JSON.parse(dec.decode(raw)); });
+  }
   function seal(v, rev, obj) {
     var iv = crypto.getRandomValues(new Uint8Array(12));
-    return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv, additionalData: enc.encode('pv1:' + v.id + ':' + rev) }, v.key, enc.encode(JSON.stringify(obj)))
+    return pack(obj).then(function (bytes) { return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv, additionalData: enc.encode('pv1:' + v.id + ':' + rev) }, v.key, bytes); })
       .then(function (ct) { return { iv: b64u(iv), ct: b64u(ct) }; });
   }
   function unseal(v, rev, box) {
     return crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64u(box.iv), additionalData: enc.encode('pv1:' + v.id + ':' + rev) }, v.key, unb64u(box.ct))
-      .then(function (pt) { return JSON.parse(dec.decode(pt)); }, function () { throw new Error('Could not unlock the synced copy. Check the code.'); });
+      .then(function (pt) { return unpack(pt); }, function () { throw new Error('Could not unlock the synced copy. Check the code.'); });
   }
   function api(v, method, qs, body) {
     return fetch('/api/vault?id=' + v.id + (qs || ''), { method: method, cache: 'no-store', headers: Object.assign({ Authorization: 'Bearer ' + v.token }, body ? { 'Content-Type': 'application/json' } : {}), body: body ? JSON.stringify(body) : undefined })
@@ -1472,7 +1611,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
   }
   var vaultP = null;
   function vault() { var c = pairStore(); if (!c) return Promise.resolve(null); if (!vaultP) vaultP = readCode(c).then(derive); return vaultP; }
-  function snapshot() { try { localStorage.setItem('polaris.snapshot', JSON.stringify({ at: C.now(), state: S })); } catch (e) {} }
+  function snapshot() { Store.snap({ at: C.now(), state: S }); }
   // pull, merge, push; on a stale write, go round again
   var epoch = 0;  // bumped by reset and pair-off, so a sync already in flight cannot write old data back
   function pairSync(quiet, tries) {
@@ -1556,8 +1695,8 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
   // Erase this device: the record, the GitHub token, the pair code, the recovery check and every sync marker
   function eraseDevice() {
     epoch++; clearTimeout(autoT); vaultP = null; ui.pairShow = false; ui.pairJoin = false; ui.recCheck = false;
-    [KEY, TOKEN_KEY, PAIR_KEY, REC_KEY, SYNC_KEY, 'polaris.snapshot'].forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
-    Store.unreadable = false; S = C.emptyState(); Store.save(S);
+    [TOKEN_KEY, PAIR_KEY, REC_KEY, SYNC_KEY].forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
+    Store.wipe(); Store.unreadable = false; S = C.emptyState(); Store.save(S);
   }
   function gh(path, opts) {
     var tok = Store.token(); if (!tok) return Promise.reject(new Error('No token saved on this device.'));
@@ -1743,7 +1882,10 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
       var errs = C.validate(j); if (errs.length) return toast(errs[0]);
       // import only: a topic you already have under the same name keeps its own record, so homes never double up
       var have = {}; live(S.topics).forEach(function (t) { have[C.slug(t.name)] = t.id; });
-      (j.topics || []).forEach(function (t) { var id = have[C.slug(t.name)]; if (id && id !== t.id) t.id = id; });
+      var remap = {};
+      (j.topics || []).forEach(function (t) { var id = have[C.slug(t.name)]; if (id && id !== t.id) { remap[t.id] = id; t.id = id; } });
+      // items that point at a topic by id follow it to the topic's new id, so no link is lost
+      ['waiting', 'vault', 'log', 'reviews'].forEach(function (k) { (j[k] || []).forEach(function (x) { if (x && x.topic && remap[x.topic]) x.topic = remap[x.topic]; }); });
       var m = C.merge(S, j, ''); S = m.state; save(); render(); saved('Imported and merged' + (m.clashes ? '. ' + m.clashes + ' clashes held in Inbox.' : ''));
     });
     if ((el.id === 'art-planet' || el.id === 'art-res') && el.files[0]) {
@@ -1763,6 +1905,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     document.body.classList.toggle('bare', route.name === 'setup' && !(ui.setupStep || 0));
     document.body.classList.toggle('focus', route.name === 'setup' && (ui.setupStep || 0) > 0);
     shell();
+    if (route.name === 'settings') Store.estimate().then(function () { var q = document.getElementById('quota-line'); if (q && route.name === 'settings') { q.textContent = quotaText(Math.round(Store.size() / 1024)); var i = q.nextElementSibling && q.nextElementSibling.querySelector('i'); if (i && Store.quota) i.style.width = Math.min(100, Math.max(Store.size() ? 1 : 0, Math.round(Store.size() / Store.quota * 100))) + '%'; } });
     document.title = (route.name === 'home' ? '' : route.name[0].toUpperCase() + route.name.slice(1) + ' · ') + 'polaris by Gugui';
   }
   var lastRoute = '';
@@ -1791,9 +1934,11 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
   // ---------- boot ----------
   document.addEventListener('DOMContentLoaded', function () {
     $app = document.getElementById('app');
-    S = Store.load();
-    if (Store.unreadable) { S = C.emptyState(); unreadable(); return; }  // saved data is there but unreadable: not a first launch
-    start();
+    Store.init().then(function () {
+      S = Store.load();
+      if (Store.unreadable) { S = C.emptyState(); unreadable(); return; }  // saved data is there but unreadable: not a first launch
+      start();
+    });
   });
   // The saved record exists but could not be read. Show that plainly, offer the raw copy, never write over it.
   function unreadable() {
@@ -1805,9 +1950,11 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
       download('polaris-raw-' + new Date().toISOString().slice(0, 10) + '.txt', [raw], 'text/plain');
     };
     document.getElementById('raw-retry').onclick = function () {
-      var s = Store.load();
-      if (Store.unreadable) return toast('Still could not read it. Your data is untouched.', 4000);
-      S = s; start();
+      Store.init().then(function () {
+        var s = Store.load();
+        if (Store.unreadable) return toast('Still could not read it. Your data is untouched.', 4000);
+        S = s; start();
+      });
     };
   }
   function start() {
@@ -1824,7 +1971,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     var lastPoll = 0; setInterval(function () { if (document.hidden || !canAuto()) return; var idle = Date.now() - lastBusy > 300000; if (idle && Date.now() - lastPoll < 120000) return; lastPoll = Date.now(); sync(true); }, 30000);
     window.addEventListener('online', function () { if (canAuto()) sync(true); });
   }
-  window.__polaris = { state: function () { return S; }, version: VERSION };
+  window.__polaris = { state: function () { return S; }, version: VERSION, flush: function () { return Store.flush(); }, backend: function () { return Store.backend; } };
 })();
 </script>
 </body>

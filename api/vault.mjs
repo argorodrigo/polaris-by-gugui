@@ -5,7 +5,9 @@
 // PUT  /api/vault?id=ID  {expectedRev, iv, ct} -> 200 {rev} | 409 {rev} | 401 | 404
 import { createHash } from 'node:crypto';
 
-const MAX = 1024 * 1024; // 1 MiB of JSON
+// 4 MiB of JSON. Upstash accepts requests up to 10 MB (free and pay-as-you-go); Vercel functions take bodies up to 4.5 MB, so 4 MiB is the safe ceiling.
+// Clients gzip before encrypting, so a 2.5 MB record travels as about 0.7 MB.
+const MAX = 4 * 1024 * 1024;
 const ID_RE = /^[a-f0-9]{32}$/;
 const B64_RE = /^[A-Za-z0-9_-]+$/;
 
@@ -64,6 +66,8 @@ function parse(request) {
 
 async function body(request) {
   if (!/^application\/json/.test(request.headers.get('content-type') || '')) return { err: json(415, { error: 'json only' }) };
+  const declared = Number(request.headers.get('content-length') || 0);
+  if (declared > MAX) return { err: json(413, { error: 'too big' }) };
   const text = await request.text();
   if (text.length > MAX) return { err: json(413, { error: 'too big' }) };
   let b; try { b = JSON.parse(text); } catch { return { err: json(400, { error: 'bad json' }) }; }
