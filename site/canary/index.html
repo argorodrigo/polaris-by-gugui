@@ -1376,6 +1376,14 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
       '<div class="row"><div style="flex:1;min-width:140px"><label for="gh-branch">Branch</label><input type="text" id="gh-branch" value="' + esc(gh.branch) + '"></div><div style="flex:1;min-width:140px"><label for="gh-path">File</label><input type="text" id="gh-path" value="' + esc(gh.path) + '"></div></div>' +
       '<label for="gh-token">Token ' + (tok ? '(saved on this device)' : '') + '</label><input type="password" id="gh-token" placeholder="' + (tok ? '••••••••  leave blank to keep' : 'github_pat_…') + '" autocomplete="off">' +
       '<div class="row" style="margin-top:12px"><button class="btn primary" data-act="gh-save-sync">Save and sync now</button>' + (tok ? '<button class="btn danger" data-act="gh-forget">Forget token</button>' : '') + '</div></div>';
+    h += (function () {
+      var fc = feedCfg(), ft = feedToken();
+      return '<div class="card" id="feed-card"><h2>Feed from my repos</h2><p class="small dim">Pulls your polaris feed from a private repo you own, read only. Make a fine-grained token for that one repo with Contents set to Read-only. It stays on this device only: it is never synced and never goes into a backup or export. polaris checks on open and every 30 minutes while it is open, and never writes to GitHub with it.</p>' +
+        '<div class="row"><div style="flex:1;min-width:180px"><label for="fd-repo">Owner / repo</label><input type="text" id="fd-repo" value="' + esc(fc.slug) + '" autocapitalize="off" spellcheck="false"></div><div style="flex:1;min-width:180px"><label for="fd-path">Path</label><input type="text" id="fd-path" value="' + esc(fc.path) + '" autocapitalize="off" spellcheck="false"></div></div>' +
+        '<label for="fd-token">Read-only token ' + (ft ? '(saved on this device)' : '') + '</label><input type="password" id="fd-token" placeholder="' + (ft ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022  leave blank to keep' : 'github_pat_\u2026') + '" autocomplete="off">' +
+        '<div class="row" style="margin-top:12px"><button class="btn primary" data-act="feed-save">Save and pull now</button><button class="btn" data-act="feed-pull">Pull now</button>' + (ft ? '<button class="btn danger" data-act="feed-forget">Forget token</button>' : '') + '</div>' +
+        '<p class="small dim" id="feed-status" style="margin-top:10px">' + feedStatus() + '</p></div>';
+    })();
     h += syncCard();
     h += '<div class="card"><h2>Switch devices</h2><p class="small dim">Your phone is your polaris; your computer is where Claude works. To bring everything over to another device: tap <b>Copy my polaris</b> here, then on the other device tap <b>Paste from my other device</b>. On an iPhone and Mac with the same Apple ID, what you copy on one pastes on the other. Nothing is overwritten: both sides are merged. Want it to happen by itself? Turn on <a href="#guide">GitHub sync</a> (Guide, Keep your phone and computer in sync).</p><div class="row"><button class="btn primary" data-act="move-copy">Copy my polaris</button><button class="btn" data-act="move-paste">Paste from my other device</button></div></div>';
     h += '<div class="card"><h2>Backup and export</h2><div class="row"><button class="btn primary" data-act="export-json">Export backup (.json)</button><button class="btn" data-act="export-md">Export Markdown (.zip)</button><label class="btn" style="margin:0;color:var(--ink)">Import backup<input type="file" id="imp" accept=".json,application/json" hidden></label></div><p class="small dim">Import merges into what you have. Nothing here is overwritten without asking.</p></div>';
@@ -1695,7 +1703,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
   // Erase this device: the record, the GitHub token, the pair code, the recovery check and every sync marker
   function eraseDevice() {
     epoch++; clearTimeout(autoT); vaultP = null; ui.pairShow = false; ui.pairJoin = false; ui.recCheck = false;
-    [TOKEN_KEY, PAIR_KEY, REC_KEY, SYNC_KEY].forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
+    [TOKEN_KEY, PAIR_KEY, REC_KEY, SYNC_KEY, FEED_TOKEN_KEY, FEED_KEY].forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
     Store.wipe(); Store.unreadable = false; S = C.emptyState(); Store.save(S);
   }
   function gh(path, opts) {
@@ -1742,6 +1750,86 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     }).then(function () { syncing = false; });
   }
 
+  // ---------- one merge path for Import backup and the repo feed ----------
+  // A topic you already have under the same name keeps its own record, so homes never double up; items that point at a
+  // topic by id follow it to the topic's id here. Then the normal merge (newer wins, a real clash is held in the Inbox).
+  function mergeIncoming(j, since) {
+    var have = {}; live(S.topics).forEach(function (t) { have[C.slug(t.name)] = t.id; });
+    var remap = {};
+    (j.topics || []).forEach(function (t) { var id = have[C.slug(t.name)]; if (id && id !== t.id) { remap[t.id] = id; t.id = id; } });
+    ['waiting', 'vault', 'log', 'reviews'].forEach(function (k) { (j[k] || []).forEach(function (x) { if (x && x.topic && remap[x.topic]) x.topic = remap[x.topic]; }); });
+    var m = C.merge(S, j, since || ''); S = m.state; return m;
+  }
+
+  // ---------- feed from my repos (pull only) ----------
+  // Pulls a polaris backup file (the feed) from a repo the user owns with a READ-ONLY token and merges it in through
+  // mergeIncoming. The token and the feed settings live in their own localStorage keys on this device: they are never part
+  // of the record, so they are never synced, never in an export or a backup. This code only ever sends GET requests.
+  var FEED_TOKEN_KEY = 'polaris.feed.token', FEED_KEY = 'polaris.feed', FEED_EVERY = 30 * 60 * 1000, feeding = false;
+  function feedToken(v) {
+    try { if (v === undefined) return localStorage.getItem(FEED_TOKEN_KEY) || ''; if (v) localStorage.setItem(FEED_TOKEN_KEY, v); else localStorage.removeItem(FEED_TOKEN_KEY); } catch (e) { return ''; }
+  }
+  function feedCfg() {
+    var o = {}; try { o = JSON.parse(localStorage.getItem(FEED_KEY) || '{}') || {}; } catch (e) {}
+    return Object.assign({ slug: 'argorodrigo/polaris-personal', path: 'feed/polaris-feed.json', etag: '', lastPull: '', lastChange: '', lastNote: '', errAt: '', errMsg: '' }, o);
+  }
+  function putFeedCfg(o) { try { localStorage.setItem(FEED_KEY, JSON.stringify(o)); } catch (e) {} }
+  function feedStatus() {
+    var c = feedCfg(), h = '';
+    if (c.errAt && (!c.lastPull || c.errAt > c.lastPull)) h += '<span class="tag warn">Feed error</span> ' + esc(c.errMsg || 'Something went wrong') + ' (' + esc(fmtAt(c.errAt)) + '). ';
+    h += c.lastPull ? 'Feed: last pulled ' + esc(fmtAt(c.lastPull)) + '.' : 'Feed: not pulled yet.';
+    if (c.lastNote) h += ' ' + esc(c.lastNote);
+    return h;
+  }
+  function paintFeed() { var el = document.getElementById('feed-status'); if (el) el.innerHTML = feedStatus(); }
+  function feedErr(e) {
+    var st = e && e.status, m = String((e && e.message) || '');
+    if (st === 401) return 'GitHub did not accept the token';
+    if (st === 403) return e.limited ? 'GitHub rate limit reached, it will try again' : 'The token cannot read this repo';
+    if (st === 404) return 'Not found: check owner/repo and the file path, and that the token can see the repo';
+    if (st) return 'GitHub said ' + st;
+    if (e && e.notFeed) return 'The file there is not a polaris feed';
+    if (e instanceof TypeError || /failed to fetch|networkerror|load failed|network request/i.test(m)) return 'Could not reach GitHub (offline?)';
+    return (m.split(/(?<=[.!?])\s/)[0].replace(/[.!?]+$/, '') || 'Something went wrong').slice(0, 90);
+  }
+  // id -> updated for every item, to count what a pull changed
+  function itemStamps(st) {
+    var d = {}; (st.topics || []).forEach(function (t) { d['t:' + t.id] = t.updated || ''; ['start', 'decisions', 'ideas', 'conflicts', 'questions', 'sources', 'progress'].forEach(function (c) { (t[c] || []).forEach(function (x) { d[t.id + c + x.id] = x.updated || ''; }); }); });
+    ['waiting', 'vault'].forEach(function (k) { (st[k] || []).forEach(function (x) { d[k + x.id] = x.updated || ''; }); });
+    return d;
+  }
+  function feedPull(manual) {
+    var tok = feedToken(); if (feeding) return Promise.resolve();
+    if (!tok) { if (manual) toast('Add a read-only token first'); return Promise.resolve(); }
+    var c = feedCfg(), mm = /^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)$/.exec(String(c.slug || '').trim()), gen = epoch;
+    function fail(msg) { var o = feedCfg(); o.errAt = C.now(); o.errMsg = msg; putFeedCfg(o); paintFeed(); if (manual) toast('Feed: ' + msg, 5000); }
+    if (!mm) { fail('Use owner/repo, like argorodrigo/polaris-personal'); return Promise.resolve(); }
+    if (!navigator.onLine) { fail('You are offline, it will try again'); return Promise.resolve(); }
+    var url = 'https://api.github.com/repos/' + encodeURIComponent(mm[1]) + '/' + encodeURIComponent(mm[2]) + '/contents/' + String(c.path || 'feed/polaris-feed.json').replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/');
+    var headers = { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github.raw+json', 'X-GitHub-Api-Version': '2022-11-28' };
+    if (c.etag) headers['If-None-Match'] = c.etag;
+    feeding = true;
+    return fetch(url, { method: 'GET', headers: headers, cache: 'no-store' }).then(function (r) {
+      if (r.status === 304) return { same: true };
+      if (!r.ok) { var e = new Error('GitHub said ' + r.status); e.status = r.status; e.limited = r.headers.get('x-ratelimit-remaining') === '0'; throw e; }
+      return r.text().then(function (txt) { return { etag: r.headers.get('ETag') || '', txt: txt }; });
+    }).then(function (res) {
+      if (gen !== epoch) return;
+      var o = feedCfg(), now = C.now(), since = o.lastPull || '';
+      if (res.same) { o.lastPull = now; o.errAt = ''; o.errMsg = ''; putFeedCfg(o); paintFeed(); if (manual) toast('Feed: nothing new'); return; }
+      var j; try { j = JSON.parse(res.txt); } catch (x) { var e1 = new Error('not json'); e1.notFeed = true; throw e1; }
+      var errs = C.validate(j); if (errs.length || !Array.isArray(j.topics)) { var e2 = new Error(errs[0] || 'not a feed'); e2.notFeed = true; throw e2; }
+      var before = itemStamps(S), m = mergeIncoming(j, since), after = itemStamps(S), added = 0, changed = 0;
+      Object.keys(after).forEach(function (k) { if (!(k in before)) added++; else if (before[k] !== after[k]) changed++; });
+      if (added || changed || m.clashes) save();
+      o.etag = res.etag; o.lastPull = now; o.errAt = ''; o.errMsg = '';
+      if (added || changed) { o.lastChange = now; o.lastNote = 'Last change: ' + added + ' new, ' + changed + ' updated.'; }
+      putFeedCfg(o);
+      var ae = document.activeElement, typing = ae && /^(input|textarea|select)$/i.test(ae.tagName);
+      if ((added || changed) && !typing && ['capture', 'setup'].indexOf(route.name) < 0 && !document.getElementById('scrim')) render(); else paintFeed();
+      if (added || changed || manual) saved(added || changed ? 'Feed: ' + added + ' new, ' + changed + ' updated' + (m.clashes ? '. ' + m.clashes + ' clashes held in Inbox.' : '') : 'Feed: nothing new', 4000);
+    }).catch(function (e) { if (gen === epoch) fail(feedErr(e)); }).then(function () { feeding = false; });
+  }
   // ---------- events ----------
   var ACT = {
     close: function () { closeModal(); pending = null; nextSup(); },
@@ -1860,12 +1948,21 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
       var t = document.getElementById('gh-token').value.trim(); if (t) Store.token(t); save(); sync();
     },
     'gh-forget': function () { confirmBox('Forget the token?', 'It is removed from this device. Your repo and your record are untouched.', 'Forget it', function () { Store.token(null); render(); toast('Token removed from this device'); }); },
+    'feed-save': function () {
+      var c = feedCfg(), slug = document.getElementById('fd-repo').value.trim() || 'argorodrigo/polaris-personal', path = document.getElementById('fd-path').value.trim() || 'feed/polaris-feed.json';
+      if (slug !== c.slug || path !== c.path) c.etag = '';  // a different file: ask for it fresh
+      c.slug = slug; c.path = path; putFeedCfg(c);
+      var t = document.getElementById('fd-token').value.trim(); if (t) { feedToken(t); c = feedCfg(); c.etag = ''; putFeedCfg(c); }
+      feedPull(true);
+    },
+    'feed-pull': function () { feedPull(true); },
+    'feed-forget': function () { confirmBox('Forget the feed token?', 'It is removed from this device. Your repo and your record are untouched.', 'Forget it', function () { feedToken(null); var c = feedCfg(); c.etag = ''; putFeedCfg(c); render(); toast('Feed token removed from this device'); }); },
     'export-json': function () { S.meta.lastBackup = C.now(); save(); download('polaris-backup-' + new Date().toISOString().slice(0, 10) + '.json', [JSON.stringify(S, null, 2)], 'application/json'); },
     'export-md': function () { S.meta.lastBackup = C.now(); save(); download('polaris-' + new Date().toISOString().slice(0, 10) + '.zip', C.zip(C.bundle(S)), 'application/zip'); },
     'save-name': function () { S.profile.name = document.getElementById('st-name').value.trim().slice(0, 40); save(); render(); saved('Saved'); },
     rule: function (v, el) { S.settings.rules.forEach(function (r) { if (r.id === v) r.on = el.checked; }); save(); },
     'art-clear': function () { S.settings.planetArt = ''; S.settings.residentArt = ''; save(); render(); },
-    reset: function () { confirmBox('Erase everything on this device?', 'This removes your whole polaris from this browser, including the GitHub token and the sync code. Export a backup first if you might want it. Your GitHub repo and your other synced devices are not touched.', 'Erase', function () { confirmBox('Last check', 'There is no undo.', 'Yes, erase it', function () { eraseDevice(); go('home'); }, true); }, true); }
+    reset: function () { confirmBox('Erase everything on this device?', 'This removes your whole polaris from this browser, including the GitHub tokens and the sync code. Export a backup first if you might want it. Your GitHub repo and your other synced devices are not touched.', 'Erase', function () { confirmBox('Last check', 'There is no undo.', 'Yes, erase it', function () { eraseDevice(); go('home'); }, true); }, true); }
   };
   function onClick(e) {
     var el = e.target.closest('[data-act]'); if (!el) { if (e.target.id === 'scrim') ACT.close(); return; }
@@ -1880,13 +1977,7 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     if (el.id === 'imp' && el.files[0]) readFile(el.files[0], 'text', function (txt) {
       var j; try { j = JSON.parse(txt); } catch (x) { return toast('That file is not JSON'); }
       var errs = C.validate(j); if (errs.length) return toast(errs[0]);
-      // import only: a topic you already have under the same name keeps its own record, so homes never double up
-      var have = {}; live(S.topics).forEach(function (t) { have[C.slug(t.name)] = t.id; });
-      var remap = {};
-      (j.topics || []).forEach(function (t) { var id = have[C.slug(t.name)]; if (id && id !== t.id) { remap[t.id] = id; t.id = id; } });
-      // items that point at a topic by id follow it to the topic's new id, so no link is lost
-      ['waiting', 'vault', 'log', 'reviews'].forEach(function (k) { (j[k] || []).forEach(function (x) { if (x && x.topic && remap[x.topic]) x.topic = remap[x.topic]; }); });
-      var m = C.merge(S, j, ''); S = m.state; save(); render(); saved('Imported and merged' + (m.clashes ? '. ' + m.clashes + ' clashes held in Inbox.' : ''));
+      var m = mergeIncoming(j, ''); save(); render(); saved('Imported and merged' + (m.clashes ? '. ' + m.clashes + ' clashes held in Inbox.' : ''));
     });
     if ((el.id === 'art-planet' || el.id === 'art-res') && el.files[0]) {
       if (el.files[0].size > 1048576) return toast('Pick an image under 1 MB');
@@ -1970,6 +2061,9 @@ if (typeof module !== 'undefined') module.exports = PolarisCore;
     var lastBusy = Date.now(); ['click', 'keydown', 'touchstart'].forEach(function (e) { document.addEventListener(e, function () { lastBusy = Date.now(); }, { passive: true }); });
     var lastPoll = 0; setInterval(function () { if (document.hidden || !canAuto()) return; var idle = Date.now() - lastBusy > 300000; if (idle && Date.now() - lastPoll < 120000) return; lastPoll = Date.now(); sync(true); }, 30000);
     window.addEventListener('online', function () { if (canAuto()) sync(true); });
+    // the repo feed: on open, then every 30 minutes while the app is open (pull only)
+    if (feedToken()) setTimeout(function () { feedPull(false); }, 1500);
+    setInterval(function () { if (feedToken()) feedPull(false); }, FEED_EVERY);
   }
   window.__polaris = { state: function () { return S; }, version: VERSION, flush: function () { return Store.flush(); }, backend: function () { return Store.backend; } };
 })();
